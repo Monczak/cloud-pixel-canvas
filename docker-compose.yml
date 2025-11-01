@@ -14,10 +14,26 @@ services:
       dockerfile: Dockerfile
     ports:
       - 8000:8000
+    environment:
+      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_DB=pixel_canvas
+    networks:
+      - cloud-pixel-canvas-network
+
+  mongo:
+    image: mongo
+    ports:
+      - 27017:27017
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=pixel_canvas
     networks:
       - cloud-pixel-canvas-network
 
 networks:
   cloud-pixel-canvas-network:
     driver: bridge
-    
+  
+volumes:
+  mongo_data:

@@ -1,0 +1,23 @@
+services:
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    ports:
+      - 3000:3000
+    networks:
+      - cloud-pixel-canvas-network
+
+  backend:
+    build:
+      context: backend
+      dockerfile: Dockerfile
+    ports:
+      - 8000:8000
+    networks:
+      - cloud-pixel-canvas-network
+
+networks:
+  cloud-pixel-canvas-network:
+    driver: bridge
+    

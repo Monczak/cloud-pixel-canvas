@@ -1,8 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import config
 from routes import canvas_router
+from wsmanager import manager
 
 app = FastAPI(title="Cloud Pixel Canvas API")
 
@@ -19,6 +20,16 @@ app.include_router(canvas_router)
 @app.get("/")
 async def root():
     return "Pixel Canvas API"
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # keep the connection alive; clients don't need to send data
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 if __name__ == "__main__":
     import uvicorn

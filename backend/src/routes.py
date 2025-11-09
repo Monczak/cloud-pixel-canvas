@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from adapters.db import DBAdapter, get_db_adapter
 from models import PixelPlacement
 from config import config
+from wsmanager import manager
 
 canvas_router = APIRouter(prefix="/canvas")
 
@@ -23,5 +24,12 @@ async def place_pixel(pixel: PixelPlacement, db: DBAdapter = Depends(get_db_adap
         raise HTTPException(status_code=400, detail=str(e))
     
     pixel_data = await db.update_pixel(pixel.x, pixel.y, pixel.color)
+
+    # broadcast to connected websocket clients: single intent 'pixel'
+    try:
+        await manager.broadcast({"intent": "pixel", "payload": pixel_data})
+    except Exception:
+        # don't fail the request if broadcast fails
+        pass
 
     return pixel_data

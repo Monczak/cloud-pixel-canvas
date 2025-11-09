@@ -8,6 +8,9 @@
 
 <svelte:head>
   <link rel="icon" href={favicon} />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Cabin:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
 </svelte:head>
 
 {@render children()}
@@ -20,5 +23,6 @@
     height: 100%;
     margin: 0;
     padding: 0;
+    font-family: 'Cabin', sans-serif;
   }
 </style>

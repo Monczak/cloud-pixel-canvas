@@ -4,21 +4,10 @@
   import { get as storeGet } from "svelte/store";
   import { pushRecentColor } from "$lib/utils";
 
-  type PixelData = {
-    x: number;
-    y: number;
-    color: string;
-    timestamp?: number;
-    userId?: string;
-  };
-
-  const DEFAULT_API =
-    (import.meta as any).env?.VITE_API_BASE ?? "http://localhost:8000";
+  import { canvasApi, type PixelData } from "$lib/api/canvas";
+  import { authApi } from "$lib/api/auth";
 
   const panThreshold = 10;
-
-  export let rawApiBase: string = DEFAULT_API;
-  $: apiBase = rawApiBase.replace(/\/$/, "");
 
   let containerEl: HTMLDivElement;
   let canvasEl: HTMLCanvasElement;
@@ -45,6 +34,8 @@
   let addedWindowListeners = false;
   let ws: WebSocket | null = null;
 
+  let hoveredUsername: string | null = null;
+
   const canvasBackgroundColor = "#ffffff";
   const voidBackgroundColor = "#181a1c";
 
@@ -59,13 +50,11 @@
 
   async function fetchCanvas() {
     try {
-      const res = await fetch(`${apiBase}/canvas`);
-      if (!res.ok) throw new Error("Failed to fetch canvas");
-      const body = await res.json();
+      const canvasState = await canvasApi.getCanvas();
 
-      logicalWidth = body.canvas_width;
-      logicalHeight = body.canvas_height;
-      pixels = body.pixels ?? {};
+      logicalWidth = canvasState.canvas_width;
+      logicalHeight = canvasState.canvas_height;
+      pixels = canvasState.pixels ?? {};
 
       draw();
       autoCenterAndFit();
@@ -202,22 +191,31 @@
     tyStart = ty;
   }
 
-  function handlePointerMove(e: PointerEvent) {
+  async function handlePointerMove(e: PointerEvent) {
     const logical = screenToLogical(e.clientX, e.clientY);
     const lx = Math.floor(logical.x);
     const ly = Math.floor(logical.y);
 
     if (lx >= 0 && lx < logicalWidth && ly >= 0 && ly < logicalHeight) {
       const key = `${lx}_${ly}`;
+      const pixelData = pixels[key];
       hovered.set({
         x: lx,
         y: ly,
-        data: pixels[key],
+        data: pixelData,
         clientX: e.clientX,
         clientY: e.clientY
       });
+
+      if (pixelData?.userId) {
+        hoveredUsername = await authApi.getUsernameById(pixelData.userId);
+      }
+      else {
+        hoveredUsername = null;
+      }
     } else {
       hovered.set(null);
+      hoveredUsername = null;
     }
     paintOverlay();
 
@@ -243,6 +241,7 @@
 
   function handlePointerLeave() {
     hovered.set(null);
+    hoveredUsername = null;
     paintOverlay();
   }
 
@@ -294,15 +293,9 @@
 
     const color = storeGet(selectedColor) ?? "#0000FF";
     try {
-      const res = await fetch(`${apiBase}/canvas`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ x: lx, y: ly, color })
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const pixelData = await canvasApi.placePixel(lx, ly, color);
 
-      pixels[`${lx}_${ly}`] = data;
+      pixels[`${lx}_${ly}`] = pixelData;
       pushRecentColor(color);
       draw();
     } catch (err) {
@@ -311,12 +304,8 @@
   }
 
   function setupWebSocket() {
-    const url = apiBase.startsWith("http")
-      ? apiBase.replace(/^http/, "ws") + "/ws"
-      : apiBase + "/ws";
-
     try {
-      ws = new WebSocket(url);
+      ws = canvasApi.createWebSocket();
 
       ws.onmessage = (ev) => {
         try {
@@ -395,6 +384,9 @@
     {#key $hovered.clientX + "-" + $hovered.clientY}
       <div class="tooltip" style="left: {$hovered.clientX}px; top: {$hovered.clientY}px">
         <div><strong>Pixel</strong> {$hovered.x}, {$hovered.y}</div>
+        {#if hoveredUsername}
+          <div><strong>Placed by</strong> {hoveredUsername}</div>
+        {/if}
         <div>{formatTimestamp($hovered.data.timestamp)}</div>
       </div>
     {/key}

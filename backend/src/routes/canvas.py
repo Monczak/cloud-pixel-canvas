@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from adapters.db import DBAdapter, get_db_adapter
 from adapters.auth import User
-from utils.auth import require_auth
+from utils.auth import get_current_user
 from models import PixelPlacement
 from config import config
 from wsmanager import manager
@@ -19,13 +19,13 @@ async def get_canvas(db: DBAdapter = Depends(get_db_adapter)):
     }
 
 @canvas_router.post("/")
-async def place_pixel(pixel: PixelPlacement, user: User = Depends(require_auth), db: DBAdapter = Depends(get_db_adapter)):
+async def place_pixel(pixel: PixelPlacement, user: User = Depends(get_current_user), db: DBAdapter = Depends(get_db_adapter)):
     try:
         pixel.validate_bounds(config.canvas_width, config.canvas_height)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    pixel_data = await db.update_pixel(pixel.x, pixel.y, pixel.color)
+    pixel_data = await db.update_pixel(pixel.x, pixel.y, pixel.color, user.user_id)
 
     # broadcast to connected websocket clients: single intent 'pixel'
     try:

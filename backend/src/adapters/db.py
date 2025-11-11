@@ -12,7 +12,7 @@ class DBAdapter(ABC):
         pass
 
     @abstractmethod
-    async def update_pixel(self, x: int, y: int, color: str) -> Dict:
+    async def update_pixel(self, x: int, y: int, color: str, user_id: Optional[str] = None) -> Dict:
         pass
 
 class MongoDBAdapter(DBAdapter):

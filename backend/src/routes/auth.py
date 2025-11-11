@@ -1,9 +1,9 @@
-from typing import Annotated, Optional
+from typing import Optional
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel, EmailStr, Field
 
-from adapters.auth import AuthAdapter, get_auth_adapter
-from utils.auth import oauth2_scheme
+from adapters.auth import AuthAdapter, User, get_auth_adapter
+from utils.auth import get_token, get_current_user as auth_get_current_user
 from config import config
 
 auth_router = APIRouter(prefix="/auth")
@@ -80,7 +80,7 @@ async def login(request: LoginRequest, response: Response, auth: AuthAdapter = D
         raise HTTPException(status_code=401, detail=str(e))
     
 @auth_router.post("/logout")
-async def logout(response: Response, auth_token: Annotated[str, Depends(oauth2_scheme)], auth: AuthAdapter = Depends(get_auth_adapter)):
+async def logout(response: Response, auth_token: Optional[str] = Depends(get_token), auth: AuthAdapter = Depends(get_auth_adapter)):
     if auth_token:
         await auth.logout(auth_token)
 
@@ -88,23 +88,11 @@ async def logout(response: Response, auth_token: Annotated[str, Depends(oauth2_s
     return {"message": "Logged out successfully"}
 
 @auth_router.get("/me")
-async def get_current_user(auth_token: Annotated[str, Depends(oauth2_scheme)], auth: AuthAdapter = Depends(get_auth_adapter)):
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    user = await auth.get_user_from_token(auth_token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    
-    return {
-        "user_id": user.user_id,
-        "email": user.email,
-        "username": user.username,
-        "email_verified": user.email_verified,
-    }
+async def get_current_user(user: User = Depends(auth_get_current_user)):
+    return user
 
 @auth_router.post("/refresh")
-async def refresh_token( request: RefreshRequest, response: Response, auth: AuthAdapter = Depends(get_auth_adapter)):
+async def refresh_token(request: RefreshRequest, response: Response, auth: AuthAdapter = Depends(get_auth_adapter)):
     try:
         token = await auth.refresh_token(request.refresh_token)
         
@@ -123,3 +111,15 @@ async def refresh_token( request: RefreshRequest, response: Response, auth: Auth
         }
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
+    
+@auth_router.get("/user/{id}")
+async def get_user_by_id(id: str, auth: AuthAdapter = Depends(get_auth_adapter)):
+    user = await auth.get_user_by_id(id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "user_id": user.user_id,
+        "username": user.username,
+        "created_at": user.created_at
+    }

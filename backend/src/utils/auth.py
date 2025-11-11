@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 
 from adapters.auth import AuthAdapter, User, get_auth_adapter
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth_token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth_token", auto_error=False)
 
 async def get_token(
     bearer_token: Optional[str] = Depends(oauth2_scheme),

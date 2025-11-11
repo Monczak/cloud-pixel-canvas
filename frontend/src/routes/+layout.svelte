@@ -2,6 +2,8 @@
   import favicon from "$lib/assets/favicon.svg";
   import Status from "$lib/components/Status.svelte";
   import ColorHotbar from "$lib/components/Hotbar.svelte";
+  import AuthWidget from "$lib/components/AuthWidget.svelte";
+  import AuthModal from "$lib/components/AuthModal.svelte";
 
   let { children } = $props();
 </script>
@@ -17,6 +19,8 @@
 
 <Status />
 <ColorHotbar />
+<AuthWidget />
+<AuthModal />
 
 <style>
   :global(html, body, #svelte) {

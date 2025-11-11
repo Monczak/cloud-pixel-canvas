@@ -4,8 +4,9 @@
   import { get as storeGet } from "svelte/store";
   import { pushRecentColor } from "$lib/utils";
 
-  import { canvasApi, type PixelData } from "$lib/api/canvas";
+  import { canvasApi, CanvasAPIError, type PixelData } from "$lib/api/canvas";
   import { authApi } from "$lib/api/auth";
+  import { currentUser, isAuthModalOpen } from "$lib/auth-stores";
 
   const panThreshold = 10;
 
@@ -291,6 +292,12 @@
     const ly = Math.floor(l.y);
     if (lx < 0 || lx >= logicalWidth || ly < 0 || ly >= logicalHeight) return;
 
+    const user = storeGet(currentUser);
+    if (!user) {
+      isAuthModalOpen.set(true);
+      return;
+    }
+
     const color = storeGet(selectedColor) ?? "#0000FF";
     try {
       const pixelData = await canvasApi.placePixel(lx, ly, color);
@@ -299,7 +306,12 @@
       pushRecentColor(color);
       draw();
     } catch (err) {
-      console.error("Couldn't place pixel:", err);
+      if (err instanceof CanvasAPIError && err.statusCode === 401) {  // Token expired or invalid
+        currentUser.set(null);
+        isAuthModalOpen.set(true);
+      } else {
+        console.error("Couldn't place pixel:", err);
+      } 
     }
   }
 

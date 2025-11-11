@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
 
 from pymongo import AsyncMongoClient
 
@@ -27,7 +27,7 @@ class MongoDBAdapter(DBAdapter):
             return doc.get("pixels", {})
         return {}
     
-    async def update_pixel(self, x: int, y: int, color: str) -> Dict:
+    async def update_pixel(self, x: int, y: int, color: str, user_id: Optional[str] = None) -> Dict:
         pixel_key = f"{x}_{y}"
         timestamp = int(datetime.now().timestamp())
         
@@ -37,6 +37,9 @@ class MongoDBAdapter(DBAdapter):
             "color": color,
             "timestamp": timestamp,
         }
+
+        if user_id:
+            pixel_data["userId"] = user_id
         
         await self.canvas_collection.update_one(
             {"canvas_id": "main"},

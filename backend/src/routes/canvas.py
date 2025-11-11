@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from adapters.db import DBAdapter, get_db_adapter
+from adapters.auth import User
+from utils.auth import require_auth
 from models import PixelPlacement
 from config import config
 from wsmanager import manager
@@ -17,7 +19,7 @@ async def get_canvas(db: DBAdapter = Depends(get_db_adapter)):
     }
 
 @canvas_router.post("/")
-async def place_pixel(pixel: PixelPlacement, db: DBAdapter = Depends(get_db_adapter)):
+async def place_pixel(pixel: PixelPlacement, user: User = Depends(require_auth), db: DBAdapter = Depends(get_db_adapter)):
     try:
         pixel.validate_bounds(config.canvas_width, config.canvas_height)
     except ValueError as e:

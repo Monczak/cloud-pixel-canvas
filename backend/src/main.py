@@ -2,7 +2,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import config
-from routes import canvas_router
+from routes.auth import auth_router
+from routes.canvas import canvas_router
 from wsmanager import manager
 
 app = FastAPI(title="Cloud Pixel Canvas API")
@@ -15,6 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(canvas_router)
 
 @app.get("/")

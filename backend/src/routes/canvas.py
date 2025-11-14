@@ -1,37 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from adapters.db import DBAdapter, get_db_adapter
 from adapters.auth import User
+from services.canvas import CanvasService, get_canvas_service
 from utils.auth import get_current_user
 from models import PixelPlacement
-from config import config
-from wsmanager import manager
 
 canvas_router = APIRouter(prefix="/canvas")
 
 @canvas_router.get("/")
-async def get_canvas(db: DBAdapter = Depends(get_db_adapter)):
-    pixels = await db.get_canvas_state()
-    return {
-        "canvas_width": config.canvas_width,
-        "canvas_height": config.canvas_height,
-        "pixels": pixels,
-    }
+async def get_canvas(canvas: CanvasService = Depends(get_canvas_service)):
+    return await canvas.get_canvas_state()
 
 @canvas_router.post("/")
-async def place_pixel(pixel: PixelPlacement, user: User = Depends(get_current_user), db: DBAdapter = Depends(get_db_adapter)):
+async def place_pixel(pixel: PixelPlacement, user: User = Depends(get_current_user), canvas: CanvasService = Depends(get_canvas_service)):
     try:
-        pixel.validate_bounds(config.canvas_width, config.canvas_height)
+        pixel_data = await canvas.place_pixel(pixel.x, pixel.y, pixel.color, user.user_id)
+        return pixel_data
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
-    pixel_data = await db.update_pixel(pixel.x, pixel.y, pixel.color, user.user_id)
-
-    # broadcast to connected websocket clients: single intent 'pixel'
-    try:
-        await manager.broadcast({"intent": "pixel", "payload": pixel_data})
-    except Exception:
-        # don't fail the request if broadcast fails
-        pass
-
-    return pixel_data

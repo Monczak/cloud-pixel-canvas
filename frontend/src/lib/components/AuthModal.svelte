@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Modal from "./Modal.svelte";
   import { isAuthModalOpen, authModalMode, currentUser, pendingVerificationEmail } from "$lib/auth-stores";
   import { authApi, AuthAPIError } from "$lib/api/auth";
 
@@ -110,12 +111,6 @@
     }
   }
 
-  function handleBackdropClick(event: MouseEvent) {
-    if ((event.target as HTMLElement).classList.contains("modal-backdrop")) {
-      closeModal();
-    }
-  }
-
   function switchToLogin() {
     authModalMode.set("login");
     error = "";
@@ -130,222 +125,166 @@
     authModalMode.set("verify");
     error = "";
   }
+
+  $: modalTitle = $authModalMode === "login" ? "Log In" : 
+                  $authModalMode === "register" ? "Register" : 
+                  "Verify Email";
 </script>
 
-{#if $isAuthModalOpen}
-  <div class="modal-backdrop" on:click={handleBackdropClick}>
-    <div class="modal">
-      <button class="close-button" on:click={closeModal}>×</button>
+<Modal isOpen={$isAuthModalOpen} onClose={closeModal} title={modalTitle}>
+  {#if $authModalMode === "login"}
+    <form
+      on:submit={(e) => {
+        e.preventDefault();
+        handleLogin();
+      }}
+    >
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input
+          id="email"
+          type="email"
+          bind:value={email}
+          placeholder="your@email.com"
+          disabled={loading}
+        />
+      </div>
 
-      {#if $authModalMode === "login"}
-        <h2>Log In</h2>
-        <form
-          on:submit={(e) => {
-            e.preventDefault();
-            handleLogin();
-          }}
-        >
-          <div class="form-group">
-            <label for="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              bind:value={email}
-              placeholder="your@email.com"
-              disabled={loading}
-            />
-          </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          bind:value={password}
+          placeholder="••••••••"
+          disabled={loading}
+        />
+      </div>
 
-          <div class="form-group">
-            <label for="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              bind:value={password}
-              placeholder="••••••••"
-              disabled={loading}
-            />
-          </div>
-
-          {#if error}
-            <div class="error">{error}</div>
-          {/if}
-
-          <button type="submit" class="submit-button" disabled={loading}>
-            {loading ? "Logging in..." : "Log In"}
-          </button>
-
-          <div class="switch-mode">
-            Don't have an account?
-            <button type="button" class="link-button" on:click={switchToRegister}>
-              Register
-            </button>
-          </div>
-        </form>
-      {:else if $authModalMode === "register"}
-        <h2>Register</h2>
-        <form
-          on:submit={(e) => {
-            e.preventDefault();
-            handleRegister();
-          }}
-        >
-          <div class="form-group">
-            <label for="reg-email">Email</label>
-            <input
-              id="reg-email"
-              type="email"
-              bind:value={email}
-              placeholder="your@email.com"
-              disabled={loading}
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="username">Username</label>
-            <input
-              id="username"
-              type="text"
-              bind:value={username}
-              placeholder="username"
-              minlength="3"
-              maxlength="20"
-              disabled={loading}
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="reg-password">Password</label>
-            <input
-              id="reg-password"
-              type="password"
-              bind:value={password}
-              placeholder="••••••••"
-              minlength="8"
-              disabled={loading}
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="confirm-password">Confirm Password</label>
-            <input
-              id="confirm-password"
-              type="password"
-              bind:value={confirmPassword}
-              placeholder="••••••••"
-              disabled={loading}
-            />
-          </div>
-
-          {#if error}
-            <div class="error">{error}</div>
-          {/if}
-
-          <button type="submit" class="submit-button" disabled={loading}>
-            {loading ? "Registering..." : "Register"}
-          </button>
-
-          <div class="switch-mode">
-            Already have an account?
-            <button type="button" class="link-button" on:click={switchToLogin}>
-              Log In
-            </button>
-          </div>
-        </form>
-      {:else if $authModalMode === "verify"}
-        <h2>Verify Email</h2>
-        <p class="verify-info">
-          We've sent a verification code to <strong>{$pendingVerificationEmail}</strong>.
-          Enter it below to complete registration.
-        </p>
-        <form
-          on:submit={(e) => {
-            e.preventDefault();
-            handleVerify();
-          }}
-        >
-          <div class="form-group">
-            <label for="code">Verification Code</label>
-            <input
-              id="code"
-              type="text"
-              bind:value={verificationCode}
-              placeholder="123456"
-              disabled={loading}
-            />
-          </div>
-
-          {#if error}
-            <div class="error">{error}</div>
-          {/if}
-
-          <button type="submit" class="submit-button" disabled={loading}>
-            {loading ? "Verifying..." : "Verify"}
-          </button>
-
-          <div class="switch-mode">
-            <button type="button" class="link-button" on:click={switchToLogin}>
-              Back to Login
-            </button>
-          </div>
-        </form>
+      {#if error}
+        <div class="error">{error}</div>
       {/if}
-    </div>
-  </div>
-{/if}
+
+      <button type="submit" class="submit-button" disabled={loading}>
+        {loading ? "Logging in..." : "Log In"}
+      </button>
+
+      <div class="switch-mode">
+        Don't have an account?
+        <button type="button" class="link-button" on:click={switchToRegister}>
+          Register
+        </button>
+      </div>
+    </form>
+  {:else if $authModalMode === "register"}
+    <form
+      on:submit={(e) => {
+        e.preventDefault();
+        handleRegister();
+      }}
+    >
+      <div class="form-group">
+        <label for="reg-email">Email</label>
+        <input
+          id="reg-email"
+          type="email"
+          bind:value={email}
+          placeholder="your@email.com"
+          disabled={loading}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input
+          id="username"
+          type="text"
+          bind:value={username}
+          placeholder="username"
+          minlength="3"
+          maxlength="20"
+          disabled={loading}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="reg-password">Password</label>
+        <input
+          id="reg-password"
+          type="password"
+          bind:value={password}
+          placeholder="••••••••"
+          minlength="8"
+          disabled={loading}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="confirm-password">Confirm Password</label>
+        <input
+          id="confirm-password"
+          type="password"
+          bind:value={confirmPassword}
+          placeholder="••••••••"
+          disabled={loading}
+        />
+      </div>
+
+      {#if error}
+        <div class="error">{error}</div>
+      {/if}
+
+      <button type="submit" class="submit-button" disabled={loading}>
+        {loading ? "Registering..." : "Register"}
+      </button>
+
+      <div class="switch-mode">
+        Already have an account?
+        <button type="button" class="link-button" on:click={switchToLogin}>
+          Log In
+        </button>
+      </div>
+    </form>
+  {:else if $authModalMode === "verify"}
+    <p class="verify-info">
+      We've sent a verification code to <strong>{$pendingVerificationEmail}</strong>.
+      Enter it below to complete registration.
+    </p>
+    <form
+      on:submit={(e) => {
+        e.preventDefault();
+        handleVerify();
+      }}
+    >
+      <div class="form-group">
+        <label for="code">Verification Code</label>
+        <input
+          id="code"
+          type="text"
+          bind:value={verificationCode}
+          placeholder="123456"
+          disabled={loading}
+        />
+      </div>
+
+      {#if error}
+        <div class="error">{error}</div>
+      {/if}
+
+      <button type="submit" class="submit-button" disabled={loading}>
+        {loading ? "Verifying..." : "Verify"}
+      </button>
+
+      <div class="switch-mode">
+        <button type="button" class="link-button" on:click={switchToLogin}>
+          Back to Login
+        </button>
+      </div>
+    </form>
+  {/if}
+</Modal>
 
 <style>
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
-
-  .modal {
-    background: white;
-    border-radius: 12px;
-    padding: 32px;
-    width: 90%;
-    max-width: 400px;
-    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
-    position: relative;
-    color: black;
-  }
-
-  .close-button {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    background: none;
-    border: none;
-    font-size: 28px;
-    cursor: pointer;
-    color: rgba(0, 0, 0, 0.5);
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-    transition: all 0.15s;
-  }
-
-  .close-button:hover {
-    background: rgba(0, 0, 0, 0.1);
-    color: rgba(0, 0, 0, 0.8);
-  }
-
-  h2 {
-    margin: 0 0 24px 0;
-    font-size: 24px;
-    font-weight: 700;
-  }
-
   .form-group {
     margin-bottom: 20px;
   }

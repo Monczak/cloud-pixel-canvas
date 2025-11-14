@@ -42,7 +42,12 @@
 
   async function handleDownload(snapshot: Snapshot) {
     try {
-      window.open(snapshot.image_url, "_blank");
+      const link = document.createElement("a");
+      link.href = snapshot.image_url;
+      link.download = snapshot.snapshot_id + ".png";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
     } catch (err) {
       console.error("Download failed:", err);
     }

@@ -134,8 +134,8 @@ class CanvasService:
 
         snapshot_doc = await self.db.create_snapshot(snapshot_id, image_key, thumbnail_key)
 
-        image_url = await self.storage.get_file_url(image_key)
-        thumbnail_url = await self.storage.get_file_url(thumbnail_key)
+        image_url = self.storage.get_file_url(image_key)
+        thumbnail_url = self.storage.get_file_url(thumbnail_key)
 
         return {
             "snapshot_id": snapshot_id,

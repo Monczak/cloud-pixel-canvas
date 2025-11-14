@@ -52,8 +52,8 @@ async def list_snapshots(
 
     snapshot_responses = []
     for snapshot in snapshots:
-        image_url = await storage.get_file_url(snapshot["image_key"])
-        thumbnail_url = await storage.get_file_url(snapshot["thumbnail_key"])
+        image_url = storage.get_file_url(snapshot["image_key"])
+        thumbnail_url = storage.get_file_url(snapshot["thumbnail_key"])
 
         snapshot_responses.append(SnapshotResponse(
             snapshot_id=snapshot["snapshot_id"],
@@ -77,7 +77,7 @@ async def download_snapshot(snapshot_id: str, storage: StorageAdapter = Depends(
     if not snapshot:
         raise HTTPException(status_code=404, detail="Snapshot not found")
     
-    image_url = await storage.get_file_url(snapshot["image_key"])
+    image_url = storage.get_file_url(snapshot["image_key"])
     return {"download_url": image_url}
 
 @canvas_router.post("/snapshot/{snapshot_id}/restore")

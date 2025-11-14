@@ -29,7 +29,7 @@ class StorageAdapter(ABC):
         pass
 
     @abstractmethod
-    async def get_file_url(self, key: str) -> str:
+    def get_file_url(self, key: str) -> str:
         pass
 
     @abstractmethod
@@ -56,7 +56,7 @@ class LocalFileStorageAdapter(StorageAdapter):
 
         return StorageFile(
             key=key,
-            url=f"file://{file_path.absolute()}",
+            url=self.get_file_url(key),
             size=stat.st_size,
             created_at=datetime.fromtimestamp(stat.st_ctime)
         )
@@ -79,9 +79,8 @@ class LocalFileStorageAdapter(StorageAdapter):
         
         return False
     
-    async def get_file_url(self, key: str) -> str:
-        file_path = self._get_file_path(key)
-        return f"file://{file_path.absolute()}"
+    def get_file_url(self, key: str) -> str:
+        return f"/static/{key}"
     
     async def file_exists(self, key: str) -> bool:
         return self._get_file_path(key).exists()

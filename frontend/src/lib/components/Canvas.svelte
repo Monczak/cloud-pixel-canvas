@@ -322,11 +322,28 @@
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
+          
           if (msg.intent === "pixel") {
+            // Single pixel update
             const p = msg.payload as PixelData;
             pixels[`${p.x}_${p.y}`] = p;
             draw();
-          }
+          } else if (msg.intent === "bulk_update") {
+            // Bulk pixel update (for example image upload)
+            const bulkPixels = msg.payload.pixels;
+            for (const [key, pixelData] of Object.entries(bulkPixels)) {
+              pixels[key] = pixelData as PixelData;
+            }
+            draw();
+          } else if (msg.intent === "bulk_overwrite") {
+            // Bulk overwrite (clear canvas first)
+            const bulkPixels = msg.payload.pixels;
+            pixels = {};
+            for (const [key, pixelData] of Object.entries(bulkPixels)) {
+              pixels[key] = pixelData as PixelData;
+            }
+            draw();
+          } 
         } catch (err) {
           console.error("WebSocket message error:", err);
         }

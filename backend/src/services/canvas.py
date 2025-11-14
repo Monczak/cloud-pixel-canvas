@@ -82,7 +82,7 @@ class CanvasService:
 
         try:
             await websocket.broadcast({
-                "intent": "bulk_update",
+                "intent": "bulk_overwrite",
                 "payload": {
                     "pixels": pixels,
                 }

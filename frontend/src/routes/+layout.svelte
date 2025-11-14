@@ -4,8 +4,10 @@
   import ColorHotbar from "$lib/components/Hotbar.svelte";
   import AuthWidget from "$lib/components/AuthWidget.svelte";
   import AuthModal from "$lib/components/AuthModal.svelte";
+  import SnapshotButton from "$lib/components/SnapshotButton.svelte";
 
   let { children } = $props();
+  let refetchCanvas: (() => Promise<void>) | undefined = $state(undefined);
 </script>
 
 <svelte:head>
@@ -18,9 +20,10 @@
 {@render children()}
 
 <Status />
-<ColorHotbar />
+<ColorHotbar onCanvasUpdate={refetchCanvas} />
 <AuthWidget />
 <AuthModal />
+<SnapshotButton />
 
 <style>
   :global(html, body, #svelte) {

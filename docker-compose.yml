@@ -3,8 +3,6 @@ services:
     build:
       context: frontend
       dockerfile: Dockerfile
-    ports:
-      - 3000:3000
     networks:
       - cloud-pixel-canvas-network
 
@@ -12,11 +10,10 @@ services:
     build:
       context: backend
       dockerfile: Dockerfile
-    ports:
-      - 8000:8000
     environment:
       - MONGO_URI=mongodb://mongo:27017
       - MONGO_DB=pixel_canvas
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
     networks:
       - cloud-pixel-canvas-network
 
@@ -28,6 +25,15 @@ services:
       - mongo_data:/data/db
     environment:
       - MONGO_INITDB_DATABASE=pixel_canvas
+    networks:
+      - cloud-pixel-canvas-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - 80:80
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - cloud-pixel-canvas-network
 

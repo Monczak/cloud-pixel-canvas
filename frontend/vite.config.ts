@@ -12,9 +12,13 @@ export default defineConfig(({ mode }) => {
             proxy: {
                 '/api': {
                     target: apiUrl,
-                    ws: true
+                    ws: true,
+                    changeOrigin: true,
                 },
-                '/static': apiUrl,
+                '/static': {
+                    target: apiUrl,
+                    changeOrigin: true,
+                },
             }
         }
     }

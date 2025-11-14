@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import config
@@ -17,15 +17,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router)
-app.include_router(canvas_router)
-app.include_router(static_router)
+api_router = APIRouter(prefix="/api")
 
-@app.get("/")
+@api_router.get("/")
 async def root():
     return "Pixel Canvas API"
 
-@app.websocket("/ws")
+@api_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
@@ -34,6 +32,12 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+api_router.include_router(auth_router)
+api_router.include_router(canvas_router)
+
+app.include_router(api_router)
+app.include_router(static_router)
 
 if __name__ == "__main__":
     import uvicorn

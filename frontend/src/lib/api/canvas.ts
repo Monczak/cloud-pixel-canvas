@@ -1,4 +1,4 @@
-import { getApiBase } from "./common";
+import { getApiBase, getWebSocketBase } from "./common";
 
 export type PixelData = {
   x: number;
@@ -42,6 +42,10 @@ class CanvasAPI {
     return getApiBase();
   }
 
+  private get webSocketUrl() {
+    return getWebSocketBase();
+  }
+
   async getCanvas(): Promise<CanvasState> {
     const res = await fetch(`${this.baseUrl}/canvas`);
     if (!res.ok) {
@@ -67,10 +71,10 @@ class CanvasAPI {
   }
 
   createWebSocket(): WebSocket {
-    const baseUrl = this.baseUrl;
+    const baseUrl = this.webSocketUrl;
     const wsUrl = baseUrl.startsWith("http")
-      ? baseUrl.replace(/^http/, "ws") + "/ws"
-      : baseUrl + "/ws";
+      ? baseUrl.replace(/^http/, "ws")
+      : baseUrl;
     
     return new WebSocket(wsUrl);
   }

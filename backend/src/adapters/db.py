@@ -80,18 +80,62 @@ class DynamoDBAdapter(DBAdapter):
         async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
             table = await dynamodb.Table(self.canvas_table)
             try:
+                # Try direct nested update first (no if_not_exists to avoid overlapping paths)
                 await table.update_item(
                     Key={"canvas_id": "main"},
-                    UpdateExpression="SET pixels.#pk = :pixel, lastModified = :ts",
-                    ExpressionAttributeNames={"#pk": pixel_key},
+                    UpdateExpression="SET #pixels.#pk = :pixel, #lm = :ts",
+                    ExpressionAttributeNames={
+                        "#pixels": "pixels",
+                        "#pk": pixel_key,
+                        "#lm": "lastModified",
+                    },
                     ExpressionAttributeValues={
                         ":pixel": pixel_data,
                         ":ts": timestamp,
                     },
                 )
             except ClientError as e:
-                print(f"Error updating pixel: {e}")
-                raise ValueError(f"Failed to update pixel: {e}")
+                # If parent map is missing or we get the overlapping-path ValidationException,
+                # create the parent 'pixels' map first (conditionally) then retry the nested update.
+                err_code = e.response.get("Error", {}).get("Code", "")
+                err_msg = e.response.get("Error", {}).get("Message", "")
+                if err_code == "ValidationException" and ("overlap" in err_msg.lower() or "invalid" in err_msg.lower()):
+                    try:
+                        # create parent map only if it doesn't exist
+                        await table.update_item(
+                            Key={"canvas_id": "main"},
+                            UpdateExpression="SET #pixels = :empty_map",
+                            ConditionExpression="attribute_not_exists(#pixels)",
+                            ExpressionAttributeNames={"#pixels": "pixels"},
+                            ExpressionAttributeValues={":empty_map": {}},
+                        )
+                    except ClientError as ce:
+                        # ignore conditional failures (map already exists) and continue to retry child update
+                        pass
+
+                    # retry nested update (should succeed now)
+                    try:
+                        await table.update_item(
+                            Key={"canvas_id": "main"},
+                            UpdateExpression="SET #pixels.#pk = :pixel, #lm = :ts",
+                            ExpressionAttributeNames={
+                                "#pixels": "pixels",
+                                "#pk": pixel_key,
+                                "#lm": "lastModified",
+                            },
+                            ExpressionAttributeValues={
+                                ":pixel": pixel_data,
+                                ":ts": timestamp,
+                            },
+                        )
+                    except ClientError as e2:
+                        print(f"Error updating pixel after ensuring parent map: {e2}")
+                        raise ValueError(f"Failed to update pixel: {e2}")
+                else:
+                    print(f"Error updating pixel: {e}")
+                    raise ValueError(f"Failed to update pixel: {e}")
+                # end except handling
+            # end outer try
         
         return pixel_data
 
@@ -100,30 +144,66 @@ class DynamoDBAdapter(DBAdapter):
 
         async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
             table = await dynamodb.Table(self.canvas_table)
+
+            # ensure parent 'pixels' map exists (one-time)
             try:
-                update_parts = []
-                attr_names = {}
-                attr_values = {":ts": timestamp}
-
-                for i, (pixel_key, pixel_data) in enumerate(pixels.items()):
-                    name_key = f"#pk{i}"
-                    value_key = f":pv{i}"
-                    update_parts.append(f"pixels.{name_key} = {value_key}")
-                    attr_names[name_key] = pixel_key
-                    attr_values[value_key] = pixel_data
-
-                update_expr = f"SET {",".join(update_parts)}, lastModified = :ts"
-
                 await table.update_item(
                     Key={"canvas_id": "main"},
-                    UpdateExpression=update_expr,
-                    ExpressionAttributeNames=attr_names,
-                    ExpressionAttributeValues=attr_values
+                    UpdateExpression="SET #pixels = :empty_map",
+                    ConditionExpression="attribute_not_exists(#pixels)",
+                    ExpressionAttributeNames={"#pixels": "pixels"},
+                    ExpressionAttributeValues={":empty_map": {}},
                 )
-            except ClientError as e:
-                print(f"Error bulk updating canvas: {e}")
-                raise ValueError(f"Failed to bulk update canvas: {e}")
-            
+            except ClientError:
+                # already exists or conditional failed — that's fine
+                pass
+
+            import asyncio
+
+            CHUNK_SIZE = 100   # tune this: 50-200 is a reasonable starting point
+            CONCURRENCY = 4    # number of concurrent chunk writes
+
+            items = list(pixels.items())
+
+            sem = asyncio.Semaphore(CONCURRENCY)
+
+            async def _write_chunk(chunk_items):
+                async with sem:
+                    # build expression for this chunk
+                    attr_names = {"#pixels": "pixels", "#lm": "lastModified"}
+                    attr_values = {":ts": timestamp}
+                    parts = []
+
+                    for idx, (pixel_key, pixel_data) in enumerate(chunk_items):
+                        name_key = f"#pk{idx}"
+                        value_key = f":pv{idx}"
+                        parts.append(f"#pixels.{name_key} = {value_key}")
+                        attr_names[name_key] = pixel_key
+                        attr_values[value_key] = pixel_data
+
+                    update_expr = f"SET {', '.join(parts)}, #lm = :ts"
+
+                    try:
+                        await table.update_item(
+                            Key={"canvas_id": "main"},
+                            UpdateExpression=update_expr,
+                            ExpressionAttributeNames=attr_names,
+                            ExpressionAttributeValues=attr_values,
+                        )
+                    except ClientError as e:
+                        print(f"Error bulk updating canvas chunk: {e}")
+                        raise ValueError(f"Failed to bulk update canvas: {e}")
+
+            # Create chunk tasks
+            tasks = []
+            for i in range(0, len(items), CHUNK_SIZE):
+                chunk = items[i:i + CHUNK_SIZE]
+                tasks.append(asyncio.create_task(_write_chunk(chunk)))
+
+            # Run and propagate errors
+            if tasks:
+                await asyncio.gather(*tasks)
+        
     async def bulk_overwrite_canvas(self, pixels: Dict) -> None:
         async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
             table = await dynamodb.Table(self.canvas_table)

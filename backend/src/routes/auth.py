@@ -21,9 +21,6 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
 @auth_router.post("/register")
 async def register(request: RegisterRequest, auth: AuthAdapter = Depends(get_auth_adapter)):
     try:
@@ -49,20 +46,9 @@ async def login(request: LoginRequest, response: Response, auth: AuthAdapter = D
             key="auth_token",
             value=token.access_token,
             httponly=True,
-            secure=not config.is_local(),
             samesite="lax",
             max_age=token.expires_in,
         )
-
-        if token.refresh_token:
-            response.set_cookie(
-                key="refresh_token",
-                value=token.refresh_token,
-                httponly=True,
-                secure=not config.is_local(),
-                samesite="lax",
-                max_age=token.expires_in,
-            )
 
         return {
             "user": {
@@ -72,7 +58,6 @@ async def login(request: LoginRequest, response: Response, auth: AuthAdapter = D
             },
             "token": {
                 "access_token": token.access_token,
-                "refresh_token": token.refresh_token,
                 "expires_in": token.expires_in
             },
         }
@@ -90,27 +75,6 @@ async def logout(response: Response, auth_token: Optional[str] = Depends(get_tok
 @auth_router.get("/me")
 async def get_current_user(user: User = Depends(auth_get_current_user)):
     return user
-
-@auth_router.post("/refresh")
-async def refresh_token(request: RefreshRequest, response: Response, auth: AuthAdapter = Depends(get_auth_adapter)):
-    try:
-        token = await auth.refresh_token(request.refresh_token)
-        
-        response.set_cookie(
-            key="auth_token",
-            value=token.access_token,
-            httponly=True,
-            secure=not config.is_local(),
-            samesite="lax",
-            max_age=token.expires_in,
-        )
-        
-        return {
-            "access_token": token.access_token,
-            "expires_in": token.expires_in,
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
     
 @auth_router.get("/user/{id}")
 async def get_user_by_id(id: str, auth: AuthAdapter = Depends(get_auth_adapter)):

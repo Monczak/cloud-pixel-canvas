@@ -62,15 +62,6 @@ class CognitoAuthAdapter(AuthAdapter):
         self.user_pool_id = config.cognito_user_pool_id
         self.client_id = config.cognito_client_id
         self.client_secret = config.cognito_client_secret
-
-    def _get_secret_hash(self, username: str) -> str:
-        message = username + self.client_id
-        digest = hmac.new(
-            self.client_secret.encode("utf-8"),
-            msg=message.encode("utf-8"),
-            digestmod=hashlib.sha256
-        ).digest()
-        return base64.b64encode(digest).decode()
     
     async def username_exists(self, username: str) -> bool:
         async with self.session.client("cognito-idp", region_name=config.aws_region) as cognito: # type: ignore
@@ -92,7 +83,6 @@ class CognitoAuthAdapter(AuthAdapter):
             try:
                 response = await cognito.sign_up(
                     ClientId=self.client_id,
-                    SecretHash=self._get_secret_hash(email),
                     Username=email,
                     Password=password,
                     UserAttributes=[
@@ -119,7 +109,6 @@ class CognitoAuthAdapter(AuthAdapter):
             try:
                 await cognito.confirm_sign_up(
                     ClientId=self.client_id,
-                    SecretHash=self._get_secret_hash(email),
                     Username=email,
                     ConfirmationCode=code
                 )
@@ -164,7 +153,6 @@ class CognitoAuthAdapter(AuthAdapter):
                     AuthParameters={
                         "USERNAME": email,
                         "PASSWORD": password,
-                        "SECRET_HASH": self._get_secret_hash(email)
                     }
                 )
                 

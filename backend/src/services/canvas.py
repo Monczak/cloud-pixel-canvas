@@ -26,8 +26,8 @@ class CanvasService:
         img = Image.new("RGB", (width, height), color="#ffffff")
 
         for pixel in pixels.values():
-            x = pixel["x"]
-            y = pixel["y"]
+            x = int(pixel.get("x", 0))
+            y = int(pixel.get("y", 0))
             color = pixel["color"]
 
             color_rgb = tuple(int(color.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))

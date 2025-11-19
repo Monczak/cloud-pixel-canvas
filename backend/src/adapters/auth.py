@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
+import base64
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hashlib
+import hmac
 import secrets
 from typing import Dict, Optional
 import uuid
 
+import aioboto3
+from botocore.exceptions import ClientError
 from pymongo import AsyncMongoClient
 
 from config import config
@@ -21,7 +25,6 @@ class User:
 @dataclass
 class AuthToken:
     access_token: str
-    refresh_token: Optional[str] = None
     expires_in: Optional[int] = None
 
 class AuthAdapter(ABC):
@@ -42,10 +45,6 @@ class AuthAdapter(ABC):
         pass
 
     @abstractmethod
-    async def refresh_token(self, refresh_token: str) -> AuthToken:
-        pass
-
-    @abstractmethod
     async def get_user_from_token(self, access_token: str) -> Optional[User]:
         pass
 
@@ -56,6 +55,232 @@ class AuthAdapter(ABC):
     @abstractmethod
     async def username_exists(self, username: str) -> bool:
         pass
+
+class CognitoAuthAdapter(AuthAdapter):
+    def __init__(self):
+        self.session = aioboto3.Session()
+        self.user_pool_id = config.cognito_user_pool_id
+        self.client_id = config.cognito_client_id
+        self.client_secret = config.cognito_client_secret
+
+    def _get_secret_hash(self, username: str) -> str:
+        message = username + self.client_id
+        digest = hmac.new(
+            self.client_secret.encode("utf-8"),
+            msg=message.encode("utf-8"),
+            digestmod=hashlib.sha256
+        ).digest()
+        return base64.b64encode(digest).decode()
+    
+    async def username_exists(self, username: str) -> bool:
+        async with self.session.client("cognito-idp", region_name=config.aws_region) as cognito: # type: ignore
+            try:
+                response = await cognito.list_users(
+                    UserPoolId=self.user_pool_id,
+                    Filter=f"username = {username}" # [TODO] Check if preferred_username should be here
+                )
+                return len(response.get("Users", [])) > 0
+            except ClientError as e:
+                print(f"Error checking username: {e}")
+                return False
+        
+    async def register(self, email: str, username: str, password: str) -> Dict:
+        if await self.username_exists(username):
+            raise ValueError("Username already taken")
+        
+        async with self.session.client("cognito-idp", region_name=config.aws_region) as cognito: # type: ignore
+            try:
+                response = await cognito.sign_up(
+                    ClientId=self.client_id,
+                    SecretHash=self._get_secret_hash(email),
+                    Username=email,
+                    Password=password,
+                    UserAttributes=[
+                        {"Name": "email", "Value": email},
+                        {"Name": "preferred_username", "Value": username}
+                    ]
+                )
+
+                return {
+                    "requires_verification": True,
+                    "user_id": response["UserSub"]
+                }
+            except ClientError as e:
+                error_code = e.response["Error"]["Code"]
+                if error_code == "UsernameExistsException":
+                    raise ValueError("Email already registered")
+                elif error_code == "InvalidPasswordException":
+                    raise ValueError("Password does not meet requirements")
+                else:
+                    raise ValueError(f"Registration failed: {e.response["Error"]["Message"]}")
+    
+    async def verify_email(self, email: str, code: str) -> User:
+        async with self.session.client("cognito-idp", region_name=config.aws_region) as cognito: # type: ignore
+            try:
+                await cognito.confirm_sign_up(
+                    ClientId=self.client_id,
+                    SecretHash=self._get_secret_hash(email),
+                    Username=email,
+                    ConfirmationCode=code
+                )
+                
+                response = await cognito.admin_get_user(
+                    UserPoolId=self.user_pool_id,
+                    Username=email
+                )
+                
+                username = email
+                user_id = None
+                created_at = response.get("UserCreateDate", datetime.now())
+                
+                for attr in response.get("UserAttributes", []):
+                    if attr["Name"] == "preferred_username":
+                        username = attr["Value"]
+                    elif attr["Name"] == "sub":
+                        user_id = attr["Value"]
+                
+                return User(
+                    user_id=user_id or response["Username"],
+                    email=email,
+                    username=username,
+                    email_verified=True,
+                    created_at=created_at
+                )
+            except ClientError as e:
+                error_code = e.response["Error"]["Code"]
+                if error_code == "CodeMismatchException":
+                    raise ValueError("Invalid verification code")
+                elif error_code == "ExpiredCodeException":
+                    raise ValueError("Verification code has expired")
+                else:
+                    raise ValueError(f"Verification failed: {e.response["Error"]["Message"]}")
+    
+    async def login(self, email: str, password: str) -> tuple[User, AuthToken]:
+        async with self.session.client("cognito-idp", region_name=config.aws_region) as cognito: # type: ignore
+            try:
+                response = await cognito.initiate_auth(
+                    ClientId=self.client_id,
+                    AuthFlow="USER_PASSWORD_AUTH",
+                    AuthParameters={
+                        "USERNAME": email,
+                        "PASSWORD": password,
+                        "SECRET_HASH": self._get_secret_hash(email)
+                    }
+                )
+                
+                auth_result = response["AuthenticationResult"]
+                access_token = auth_result["AccessToken"]
+                
+                user_response = await cognito.get_user(AccessToken=access_token)
+                
+                username = email
+                user_id = None
+                email_verified = False
+                
+                for attr in user_response.get("UserAttributes", []):
+                    if attr["Name"] == "preferred_username":
+                        username = attr["Value"]
+                    elif attr["Name"] == "sub":
+                        user_id = attr["Value"]
+                    elif attr["Name"] == "email_verified":
+                        email_verified = attr["Value"].lower() == "true"
+                
+                user = User(
+                    user_id=user_id or user_response["Username"],
+                    email=email,
+                    username=username,
+                    email_verified=email_verified,
+                    created_at=datetime.now()
+                )
+                
+                token = AuthToken(
+                    access_token=access_token,
+                    expires_in=auth_result.get("ExpiresIn", 3600)
+                )
+                
+                return user, token
+            except ClientError as e:
+                error_code = e.response["Error"]["Code"]
+                if error_code == "NotAuthorizedException":
+                    raise ValueError("Invalid credentials")
+                elif error_code == "UserNotConfirmedException":
+                    raise ValueError("Email not verified")
+                else:
+                    raise ValueError(f"Login failed: {e.response["Error"]["Message"]}")
+    
+    async def logout(self, access_token: str) -> bool:
+        async with self.session.client("cognito-idp", region_name=config.aws_region) as cognito: # type: ignore 
+            try:
+                await cognito.global_sign_out(AccessToken=access_token)
+                return True
+            except ClientError as e:
+                print(f"Logout error: {e}")
+                return False
+            
+    async def get_user_from_token(self, access_token: str) -> Optional[User]:
+        async with self.session.client("cognito-idp", region_name=config.aws_region) as cognito: # type: ignore
+            try:
+                response = await cognito.get_user(AccessToken=access_token)
+                
+                username = None
+                user_id = None
+                email = None
+                email_verified = False
+                
+                for attr in response.get("UserAttributes", []):
+                    if attr["Name"] == "preferred_username":
+                        username = attr["Value"]
+                    elif attr["Name"] == "sub":
+                        user_id = attr["Value"]
+                    elif attr["Name"] == "email":
+                        email = attr["Value"]
+                    elif attr["Name"] == "email_verified":
+                        email_verified = attr["Value"].lower() == "true"
+                
+                return User(
+                    user_id=user_id or response["Username"],
+                    email=email or response["Username"],
+                    username=username or email or response["Username"],
+                    email_verified=email_verified,
+                    created_at=datetime.now()
+                )
+            except ClientError as e:
+                print(f"Token validation error: {e}")
+                return None
+
+    async def get_user_by_id(self, user_id: str) -> Optional[User]:
+        async with self.session.client("cognito-idp", region_name=config.aws_region) as cognito: # type: ignore
+            try:
+                response = await cognito.list_users(
+                    UserPoolId=self.user_pool_id,
+                    Filter=f"sub = '{user_id}'"
+                )
+                
+                users = response.get("Users", [])
+                if not users:
+                    return None
+                
+                user_data = users[0]
+                username = user_id
+                email = user_data.get("Username", "")
+                created_at = user_data.get("UserCreateDate", datetime.now())
+                
+                for attr in user_data.get("Attributes", []):
+                    if attr["Name"] == "preferred_username":
+                        username = attr["Value"]
+                    elif attr["Name"] == "email":
+                        email = attr["Value"]
+                
+                return User(
+                    user_id=user_id,
+                    email=email,
+                    username=username,
+                    email_verified=True,
+                    created_at=created_at
+                )
+            except ClientError as e:
+                print(f"Error getting user by id: {e}")
+                return None
 
 class LocalMongoAuthAdapter(AuthAdapter):
     def __init__(self, mongo_uri: str, mongo_db: str):
@@ -167,7 +392,6 @@ class LocalMongoAuthAdapter(AuthAdapter):
 
         token = AuthToken(
             access_token=access_token,
-            refresh_token=refresh_token,
             expires_in=86400,  # 24 hours
         )
 
@@ -176,30 +400,6 @@ class LocalMongoAuthAdapter(AuthAdapter):
     async def logout(self, access_token: str) -> bool:
         result = await self.tokens_collection.delete_one({"access_token": access_token})
         return result.deleted_count > 0
-    
-    async def refresh_token(self, refresh_token: str) -> AuthToken:
-        token_doc = await self.tokens_collection.find_one({"refresh_token": refresh_token})
-        if not token_doc:
-            raise ValueError("Invalid refresh token")
-
-        access_token = self._generate_token()
-        expires_at = datetime.now() + timedelta(hours=24)
-
-        await self.tokens_collection.update_one(
-            {"refresh_token": refresh_token},
-            {
-                "$set": {
-                    "access_token": access_token,
-                    "expires_at": expires_at,
-                }
-            },
-        )
-
-        return AuthToken(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_in=86400,
-        )
     
     async def get_user_from_token(self, access_token: str) -> User | None:
         token_doc = await self.tokens_collection.find_one({"access_token": access_token})
@@ -242,5 +442,7 @@ def get_auth_adapter() -> AuthAdapter:
     match config.environment:
         case "local":
             return LocalMongoAuthAdapter(config.mongo_uri, config.mongo_db)
+        case "aws":
+            return CognitoAuthAdapter()
     
     raise ValueError(f"Unknown environment: {config.environment}")

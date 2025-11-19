@@ -17,6 +17,18 @@ class Config:
 
         self.local_storage_path: str = os.getenv("LOCAL_STORAGE_PATH", ".storage")
 
+        # AWS
+        self.aws_region: str = os.getenv("AWS_REGION", "us-east-1")
+
+        self.dynamodb_canvas_table: str = os.getenv("DYNAMODB_CANVAS_TABLE", "canvas")
+        self.dynamodb_snapshots_table: str = os.getenv("DYNAMODB_SNAPSHOTS_TABLE", "snapshots")
+
+        self.cognito_user_pool_id: str = os.getenv("COGNITO_USER_POOL_ID", "")
+        self.cognito_client_id: str = os.getenv("COGNITO_CLIENT_ID", "")
+        self.cognito_client_secret: str = os.getenv("COGNITO_CLIENT_SECRET", "")
+
+        self.s3_bucket_name: str = os.getenv("S3_BUCKET_NAME", "")
+
     def is_local(self) -> bool:
         return self.environment == "local"
 

@@ -7,6 +7,10 @@ class Config:
         self.cors_origins: List[str] = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
         self.system_key: str = os.getenv("SYSTEM_KEY", "very-secret-key")
 
+        self.tile_size: int = int(os.getenv("TILE_SIZE", 32))
+        self.chunk_size: int = int(os.getenv("CHUNK_SIZE", 100))
+        self.chunk_write_concurrency: int = int(os.getenv("CHUNK_WRITE_CONCURRENCY", 4))
+
         self.mongo_uri: str = os.getenv("MONGO_URI", "mongodb://localhost:27017")
         self.mongo_db: str = os.getenv("MONGO_DB", "pixel_canvas")
 
@@ -22,6 +26,7 @@ class Config:
 
         self.dynamodb_canvas_table: str = os.getenv("DYNAMODB_CANVAS_TABLE", "canvas")
         self.dynamodb_snapshots_table: str = os.getenv("DYNAMODB_SNAPSHOTS_TABLE", "snapshots")
+        self.dynamodb_snapshot_tiles_table: str = os.getenv("DYNAMODB_SNAPSHOT_TILES_TABLE", "snapshot-tiles")
 
         self.cognito_user_pool_id: str = os.getenv("COGNITO_USER_POOL_ID", "")
         self.cognito_client_id: str = os.getenv("COGNITO_CLIENT_ID", "")

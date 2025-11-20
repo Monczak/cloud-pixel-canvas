@@ -27,3 +27,24 @@ resource "aws_dynamodb_table" "snapshots" {
     Name = "${var.project_name}-snapshots"
   }
 }
+
+resource "aws_dynamodb_table" "snapshot_tiles" {
+  name         = "${var.project_name}-snapshot-tiles"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "snapshot_id"
+  range_key    = "tile_id"
+
+  attribute {
+    name = "snapshot_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "tile_id"
+    type = "S"
+  }
+
+  tags = {
+    Name = "${var.project_name}-snapshot-tiles"
+  }
+}

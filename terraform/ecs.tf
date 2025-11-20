@@ -15,8 +15,8 @@ resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.project_name}-backend"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "512"
+  memory                   = "1024"
   execution_role_arn       = var.lab_role_arn
   task_role_arn            = var.lab_role_arn
 
@@ -48,6 +48,10 @@ resource "aws_ecs_task_definition" "backend" {
         value = aws_dynamodb_table.snapshots.name
       },
       {
+        name  = "DYNAMODB_SNAPSHOT_TILES_TABLE"
+        value = aws_dynamodb_table.snapshot_tiles.name
+      },
+      {
         name  = "COGNITO_USER_POOL_ID"
         value = aws_cognito_user_pool.main.id
       },
@@ -77,7 +81,7 @@ resource "aws_ecs_task_definition" "backend" {
       },
       {
         name  = "SYSTEM_KEY",
-        value = tostring(random_password.system_key.result) 
+        value = tostring(random_password.system_key.result)
       },
     ]
 

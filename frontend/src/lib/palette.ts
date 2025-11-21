@@ -2,6 +2,9 @@ import { writable, derived, get } from "svelte/store";
 
 export type Slot = { type: 'fixed' | 'custom'; index: number };
 
+const STORAGE_KEY_COLORS = "pixel_canvas_custom_colors";
+const STORAGE_KEY_SLOT = "pixel_canvas_active_slot";
+
 export const fixedColors = [
   "#000000", // Black
   "#808080", // Gray
@@ -15,7 +18,8 @@ export const fixedColors = [
   "#800080", // Purple
 ];
 
-export const customColors = writable<(string | null)[]>(Array(10).fill(null));
+const initialCustomColors = Array(10).fill(null);
+export const customColors = writable<(string | null)[]>(initialCustomColors);
 export const activeSlot = writable<Slot>({ type: 'fixed', index: 0 });
 
 export const selectedColor = derived(
@@ -28,6 +32,53 @@ export const selectedColor = derived(
     return $custom[$slot.index] ?? "#000000";
   }
 );
+
+// Persistence - save hotbar to localStorage
+if (typeof window !== "undefined") {
+  try {
+    const storedColors = localStorage.getItem(STORAGE_KEY_COLORS);
+    if (storedColors) {
+      const parsed = JSON.parse(storedColors);
+      if (Array.isArray(parsed) && parsed.length === 10) {
+        customColors.set(parsed);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load custom colors:", err);
+  }
+
+  try {
+    const storedSlot = localStorage.getItem(STORAGE_KEY_SLOT);
+    if (storedSlot) {
+      const parsed = JSON.parse(storedSlot);
+      if (
+        parsed && 
+        (parsed.type === 'fixed' || parsed.type === 'custom') && 
+        typeof parsed.index === 'number'
+      ) {
+        activeSlot.set(parsed);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load active slot:", err);
+  }
+
+  customColors.subscribe((colors) => {
+    try {
+      localStorage.setItem(STORAGE_KEY_COLORS, JSON.stringify(colors));
+    } catch (err) {
+      console.error("Failed to save custom colors:", err);
+    }
+  });
+
+  activeSlot.subscribe((slot) => {
+    try {
+      localStorage.setItem(STORAGE_KEY_SLOT, JSON.stringify(slot));
+    } catch (err) {
+      console.error("Failed to save active slot:", err);
+    }
+  });
+}
 
 export function selectSlot(type: 'fixed' | 'custom', index: number) {
   activeSlot.set({ type, index });

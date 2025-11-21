@@ -54,43 +54,44 @@ class DBAdapter(ABC):
         pass
 
 class DynamoDBAdapter(DBAdapter):
-    def __init__(self, dynamodb_client):
-        self.dynamodb = dynamodb_client
-        self.canvas_table = self.dynamodb.Table(config.dynamodb_canvas_table)
-        self.snapshots_table = self.dynamodb.Table(config.dynamodb_snapshots_table)
-        self.snapshot_tiles_table = self.dynamodb.Table(config.dynamodb_snapshot_tiles_table)
+    def __init__(self, dynamo_resource):
+        self.dynamodb = dynamo_resource
+        
+        self.canvas_table_name = config.dynamodb_canvas_table
+        self.snapshots_table_name = config.dynamodb_snapshots_table
+        self.snapshot_tiles_table_name = config.dynamodb_snapshot_tiles_table
 
         self.tile_size = config.tile_size
         self.chunk_size = config.chunk_size
         self.chunk_write_concurrency = config.chunk_write_concurrency
 
     async def _execute_atomic_update(self, key: Dict, update_expr: str, attr_names: Dict, attr_values: Dict):
+        table = await self.dynamodb.Table(self.canvas_table_name)
+        
         try:
-            await self.canvas_table.update_item(
+            await table.update_item(
                 Key=key,
                 UpdateExpression=update_expr,
                 ExpressionAttributeNames=attr_names,
                 ExpressionAttributeValues=attr_values,
             )
         except ClientError as e:
-            # Check for ValidationException (common when path doesn't exist)
             if e.response.get("Error", {}).get("Code") == "ValidationException":
-                # Create the empty parent 'pixels' map if it doesn't exist
+                # Atomic initialization of the parent map 'pixels'
                 try:
-                    await self.canvas_table.update_item(
+                    await table.update_item(
                         Key=key,
                         UpdateExpression="SET #pixels = :empty_map",
                         ConditionExpression="attribute_not_exists(#pixels)",
                         ExpressionAttributeNames={"#pixels": "pixels"},
                         ExpressionAttributeValues={":empty_map": {}},
                     )
-                except ClientError as init_err:
-                    # Ignore if someone else created it concurrently
-                    if init_err.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
-                        raise init_err
-                
-                # Retry the original update
-                await self.canvas_table.update_item(
+                except ClientError as init_error:
+                    if init_error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                        raise init_error
+
+                # Retry the original operation
+                await table.update_item(
                     Key=key,
                     UpdateExpression=update_expr,
                     ExpressionAttributeNames=attr_names,
@@ -100,49 +101,48 @@ class DynamoDBAdapter(DBAdapter):
                 raise e
 
     async def get_canvas_state(self) -> Dict[str, PixelData]:
-        pixels_map = {}
+        pixels_map: Dict[str, PixelData] = {}
         try:
-            response = await self.canvas_table.scan(
+            table = await self.dynamodb.Table(self.canvas_table_name)
+            response = await table.scan(
                 FilterExpression=Attr("canvas_id").begins_with("main")
             )
             for item in response.get("Items", []):
                 raw_pixels = item.get("pixels", {}) or {}
                 for key, val in raw_pixels.items():
-                    # DynamoDB returns Decimals, pydantic wants ints
-                    clean_val = {
+                    val_fixed = {
                         k: int(v) if isinstance(v, Decimal) else v 
                         for k, v in val.items()
                     }
-                    pixels_map[key] = PixelData(**clean_val) # type: ignore
+                    pixels_map[key] = PixelData(**val_fixed) # type: ignore
             return pixels_map
         except ClientError as e:
-            print(f"Error getting canvas: {e}")
+            print(f"Error getting canvas state: {e}")
             return {}
     
     async def update_pixel(self, pixel: PixelData) -> PixelData:
         pixel_key = f"{pixel.x}_{pixel.y}"
         tx = pixel.x // self.tile_size
         ty = pixel.y // self.tile_size
-        
+        tile_canvas_id = f"main#{tx}_{ty}"
+
         await self._execute_atomic_update(
-            key={"canvas_id": f"main#{tx}_{ty}"},
+            key={"canvas_id": tile_canvas_id},
             update_expr="SET #pixels.#pk = :pixel, #lm = :ts",
             attr_names={
-                "#pixels": "pixels", 
-                "#pk": pixel_key, 
-                "#lm": "lastModified"
+                "#pixels": "pixels",
+                "#pk": pixel_key,
+                "#lm": "lastModified",
             },
             attr_values={
                 ":pixel": pixel.model_dump(),
-                ":ts": pixel.timestamp
+                ":ts": pixel.timestamp,
             }
         )
         return pixel
 
     async def bulk_update_canvas(self, pixels: List[PixelData]) -> int:
         timestamp = int(datetime.now().timestamp())
-        
-        # Group by tile
         tiles = defaultdict(list)
         for p in pixels:
             tx = p.x // self.tile_size
@@ -151,47 +151,51 @@ class DynamoDBAdapter(DBAdapter):
 
         sem = asyncio.Semaphore(self.chunk_write_concurrency)
 
-        async def _process_tile(tile_id, tile_pixels):
+        async def _process_tile_chunk(tile_id: str, chunk: List[PixelData]):
             async with sem:
-                # Chunk updates within the tile (DynamoDB expression size limits)
-                for i in range(0, len(tile_pixels), self.chunk_size):
-                    chunk = tile_pixels[i : i + self.chunk_size]
-                    
-                    update_parts = []
-                    attr_names = {"#pixels": "pixels", "#lm": "lastModified"}
-                    attr_values = {":ts": timestamp}
+                key = {"canvas_id": f"main#{tile_id}"}
+                update_parts = []
+                attr_names = {"#pixels": "pixels", "#lm": "lastModified"}
+                attr_values: Dict[str, Any] = {":ts": timestamp}
 
-                    for idx, p in enumerate(chunk):
-                        # Use index to ensure unique placeholder names in one expression
-                        pk = f"{p.x}_{p.y}"
-                        attr_names[f"#k{idx}"] = pk
-                        attr_values[f":v{idx}"] = p.model_dump()
-                        update_parts.append(f"#pixels.#k{idx} = :v{idx}")
+                for idx, p in enumerate(chunk):
+                    p_key = f"{p.x}_{p.y}"
+                    name_ph = f"#pk{idx}"
+                    val_ph = f":pv{idx}"
+                    update_parts.append(f"#pixels.{name_ph} = {val_ph}")
+                    attr_names[name_ph] = p_key
+                    attr_values[val_ph] = p.model_dump()
 
-                    await self._execute_atomic_update(
-                        key={"canvas_id": f"main#{tile_id}"},
-                        update_expr=f"SET {', '.join(update_parts)}, #lm = :ts",
-                        attr_names=attr_names,
-                        attr_values=attr_values
-                    )
+                update_expr = f"SET {', '.join(update_parts)}, #lm = :ts"
 
-        tasks = [_process_tile(tid, t_pixels) for tid, t_pixels in tiles.items()]
+                await self._execute_atomic_update(
+                    key=key,
+                    update_expr=update_expr,
+                    attr_names=attr_names,
+                    attr_values=attr_values
+                )
+
+        tasks = []
+        for tile_id, tile_pixels in tiles.items():
+            for i in range(0, len(tile_pixels), self.chunk_size):
+                chunk = tile_pixels[i : i + self.chunk_size]
+                tasks.append(_process_tile_chunk(tile_id, chunk))
+
         if tasks:
             await asyncio.gather(*tasks)
-            
         return len(pixels)
-        
+
     async def bulk_overwrite_canvas(self, pixels: List[PixelData]) -> None:
-        # Group by tile
+        table = await self.dynamodb.Table(self.canvas_table_name)
+        
         tiles = defaultdict(dict)
         for p in pixels:
             tx = p.x // self.tile_size
             ty = p.y // self.tile_size
             tiles[f"{tx}_{ty}"][f"{p.x}_{p.y}"] = p.model_dump()
 
-        # Overwrite/Put new tiles
         for tile_id, tile_data in tiles.items():
-            await self.canvas_table.put_item(
+            await table.put_item(
                 Item={
                     "canvas_id": f"main#{tile_id}",
                     "pixels": tile_data,
@@ -199,26 +203,24 @@ class DynamoDBAdapter(DBAdapter):
                 }
             )
 
-        # Clean up stale tiles (tiles that exist in DB but not in new set)
         try:
-            resp = await self.canvas_table.scan(
+            resp = await table.scan(
                 FilterExpression=Attr("canvas_id").begins_with("main#"),
                 ProjectionExpression="canvas_id"
             )
             active_keys = {f"main#{tid}" for tid in tiles.keys()}
-            
             delete_futures = []
             for item in resp.get("Items", []):
                 cid = item.get("canvas_id")
                 if cid and cid not in active_keys:
-                    delete_futures.append(self.canvas_table.delete_item(Key={"canvas_id": cid}))
-            
+                    delete_futures.append(table.delete_item(Key={"canvas_id": cid}))
             if delete_futures:
                 await asyncio.gather(*delete_futures)
         except Exception as e:
             print(f"Error cleaning up old tiles: {e}")
-            
+
     async def create_snapshot_metadata(self, snapshot_id: str, image_key: str, thumbnail_key: str) -> Dict:
+        table = await self.dynamodb.Table(self.snapshots_table_name)
         meta = {
             "snapshot_id": snapshot_id,
             "image_key": image_key,
@@ -227,48 +229,49 @@ class DynamoDBAdapter(DBAdapter):
             "canvas_height": config.canvas_height,
             "created_at": datetime.now().isoformat(),
         }
-        await self.snapshots_table.put_item(Item=meta)
+        await table.put_item(Item=meta)
         return meta
-    
+
     async def create_snapshot_tiles(self, snapshot_id: str, tiles_data: List[Dict]) -> None:
-        # tiles_data here is raw dicts from the scanner
+        table = await self.dynamodb.Table(self.snapshot_tiles_table_name)
         sem = asyncio.Semaphore(10)
         
         async def _write(tile):
             async with sem:
                 cid = tile.get("canvas_id", "")
                 tile_id = cid.split("#", 1)[1] if "#" in cid else "0_0"
-                await self.snapshot_tiles_table.put_item(Item={
+                await table.put_item(Item={
                     "snapshot_id": snapshot_id,
                     "tile_id": tile_id,
                     "pixels": tile.get("pixels", {})
                 })
 
         await asyncio.gather(*[_write(t) for t in tiles_data])
-    
+
     async def get_snapshots(self, limit: int = 50, offset: int = 0) -> List[Dict]:
         try:
-            resp = await self.snapshots_table.scan()
+            table = await self.dynamodb.Table(self.snapshots_table_name)
+            resp = await table.scan()
             items = resp.get("Items", [])
             items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
             return items[offset : offset + limit]
         except ClientError:
             return []
-    
+
     async def get_snapshot_by_id(self, snapshot_id: str) -> Optional[Dict]:
         try:
-            resp = await self.snapshots_table.get_item(Key={"snapshot_id": snapshot_id})
+            snapshots_table = await self.dynamodb.Table(self.snapshots_table_name)
+            resp = await snapshots_table.get_item(Key={"snapshot_id": snapshot_id})
             if "Item" not in resp:
                 return None
             
             meta = resp["Item"]
             
-            # Fetch tiles
-            tiles_resp = await self.snapshot_tiles_table.query(
+            tiles_table = await self.dynamodb.Table(self.snapshot_tiles_table_name)
+            tiles_resp = await tiles_table.query(
                 KeyConditionExpression=Key("snapshot_id").eq(snapshot_id)
             )
             
-            # Reconstruct pixels map
             pixels = {}
             for t in tiles_resp.get("Items", []):
                 for p_key, p_val in t.get("pixels", {}).items():
@@ -285,16 +288,18 @@ class DynamoDBAdapter(DBAdapter):
 
     async def delete_snapshot(self, snapshot_id: str) -> bool:
         try:
-            await self.snapshots_table.delete_item(Key={"snapshot_id": snapshot_id})
+            snapshots_table = await self.dynamodb.Table(self.snapshots_table_name)
+            await snapshots_table.delete_item(Key={"snapshot_id": snapshot_id})
             
-            tiles = await self.snapshot_tiles_table.query(
+            tiles_table = await self.dynamodb.Table(self.snapshot_tiles_table_name)
+            tiles = await tiles_table.query(
                 KeyConditionExpression=Key("snapshot_id").eq(snapshot_id),
                 ProjectionExpression="tile_id"
             )
             
             fs = []
             for t in tiles.get("Items", []):
-                fs.append(self.snapshot_tiles_table.delete_item(
+                fs.append(tiles_table.delete_item(
                     Key={"snapshot_id": snapshot_id, "tile_id": t["tile_id"]}
                 ))
             if fs:
@@ -305,7 +310,8 @@ class DynamoDBAdapter(DBAdapter):
 
     async def get_snapshot_count(self) -> int:
         try:
-            resp = await self.snapshots_table.scan(Select="COUNT")
+            table = await self.dynamodb.Table(self.snapshots_table_name)
+            resp = await table.scan(Select="COUNT")
             return resp.get("Count", 0)
         except ClientError:
             return 0

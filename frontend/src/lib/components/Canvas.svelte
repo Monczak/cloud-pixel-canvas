@@ -8,6 +8,8 @@
   import { authApi } from "$lib/api/auth";
   import { currentUser, isAuthModalOpen } from "$lib/auth-stores";
 
+  export let onloaded: (() => void) | undefined = undefined;
+
   const panThreshold = 10;
 
   let containerEl: HTMLDivElement;
@@ -41,7 +43,7 @@
   const voidBackgroundColor = "#181a1c";
 
   function formatTimestamp(unix?: number) {
-    if (!unix) return "No timestamp";
+    if (!unix) return "Just now";
     try {
       return new Date(unix * 1000).toLocaleString();
     } catch {
@@ -59,6 +61,8 @@
 
       draw();
       autoCenterAndFit();
+      
+      onloaded?.();
     } catch (err) {
       console.error("Canvas fetch error:", err);
     }
@@ -299,14 +303,35 @@
     }
 
     const color = storeGet(selectedColor) ?? "#0000FF";
+    const key = `${lx}_${ly}`;
+    const previousPixel = pixels[key]; // Backup for optimistic rollback
+
+    // Optimistic UI update
+    pixels[key] = {
+      x: lx,
+      y: ly,
+      color: color,
+      userId: user.user_id,
+      timestamp: 0 // 0 indicates "Just now" / pending
+    };
+    draw();
+    pushRecentColor(color);
+
     try {
       const pixelData = await canvasApi.placePixel(lx, ly, color);
-
-      pixels[`${lx}_${ly}`] = pixelData;
-      pushRecentColor(color);
+      // Confirm update with server data
+      pixels[key] = pixelData;
       draw();
     } catch (err) {
-      if (err instanceof CanvasAPIError && err.statusCode === 401) {  // Token expired or invalid
+      // Revert on failure
+      if (previousPixel) {
+        pixels[key] = previousPixel;
+      } else {
+        delete pixels[key];
+      }
+      draw();
+
+      if (err instanceof CanvasAPIError && err.statusCode === 401) {  
         currentUser.set(null);
         isAuthModalOpen.set(true);
       } else {
@@ -324,19 +349,16 @@
           const msg = JSON.parse(ev.data);
           
           if (msg.intent === "pixel") {
-            // Single pixel update
             const p = msg.payload as PixelData;
             pixels[`${p.x}_${p.y}`] = p;
             draw();
           } else if (msg.intent === "bulk_update") {
-            // Bulk pixel update (for example image upload)
             const bulkPixels = msg.payload.pixels;
             for (const [key, pixelData] of Object.entries(bulkPixels)) {
               pixels[key] = pixelData as PixelData;
             }
             draw();
           } else if (msg.intent === "bulk_overwrite") {
-            // Bulk overwrite (clear canvas first)
             const bulkPixels = msg.payload.pixels;
             pixels = {};
             for (const [key, pixelData] of Object.entries(bulkPixels)) {
@@ -361,6 +383,8 @@
   onMount(() => {
     if (typeof window === "undefined") return;
 
+    resizeCanvases();
+    
     fetchCanvas();
     setupWebSocket();
 
@@ -413,10 +437,16 @@
     {#key $hovered.clientX + "-" + $hovered.clientY}
       <div class="tooltip" style="left: {$hovered.clientX}px; top: {$hovered.clientY}px">
         <div><strong>Pixel</strong> {$hovered.x}, {$hovered.y}</div>
-        {#if hoveredUsername}
-          <div><strong>Placed by</strong> {hoveredUsername}</div>
+        {#if $hovered.data.timestamp === 0}
+           <!-- Optimistic Pixel -->
+           <div><strong>Placed by</strong> {$currentUser?.username || 'You'}</div>
+           <div>Just now</div>
+        {:else}
+           {#if hoveredUsername}
+             <div><strong>Placed by</strong> {hoveredUsername}</div>
+           {/if}
+           <div>{formatTimestamp($hovered.data.timestamp)}</div>
         {/if}
-        <div>{formatTimestamp($hovered.data.timestamp)}</div>
       </div>
     {/key}
   {/if}

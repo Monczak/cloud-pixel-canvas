@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { hovered, view, selectedColor, pipetteMode, handlePipettePick } from "$lib/stores";
+  import { hovered, view, pipetteMode } from "$lib/stores";
+  import { selectedColor, handlePipettePick } from "$lib/palette";
   import { get as storeGet } from "svelte/store";
   
   import { canvasApi, CanvasAPIError, type PixelData } from "$lib/api/canvas";
@@ -310,7 +311,6 @@
       const pixel = pixels[key];
       const colorToPick = pixel ? pixel.color : "#FFFFFF";
       
-      // Use the centralized logic for picking a color via pipette
       handlePipettePick(colorToPick);
       pipetteMode.set(false);
       return;

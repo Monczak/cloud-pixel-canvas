@@ -1,13 +1,13 @@
 <script lang="ts">
+  import { pipetteMode } from "$lib/stores";
   import { 
     selectedColor, 
     fixedColors, 
     customColors, 
-    pipetteMode, 
-    activeSlot,
-    selectSlot,
-    updateFromColorPicker
-  } from "$lib/stores";
+    activeSlot, 
+    selectSlot, 
+    updateFromColorPicker 
+  } from "$lib/palette";
   
   import { currentUser, isAuthModalOpen } from "$lib/auth-stores";
   import { canvasApi, CanvasAPIError } from "$lib/api/canvas";

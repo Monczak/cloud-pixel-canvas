@@ -4,3 +4,4 @@ export { default as Canvas } from "./components/Canvas.svelte";
 export { default as Status } from "./components/Status.svelte";
 export { default as ColorHotbar } from "./components/Hotbar.svelte";
 export * from "./stores";
+export * from "./palette";

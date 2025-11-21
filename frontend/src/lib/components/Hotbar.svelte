@@ -1,5 +1,14 @@
 <script lang="ts">
-  import { selectedColor, fixedColors, customColors, pipetteMode } from "$lib/stores";
+  import { 
+    selectedColor, 
+    fixedColors, 
+    customColors, 
+    pipetteMode, 
+    activeSlot,
+    selectSlot,
+    updateFromColorPicker
+  } from "$lib/stores";
+  
   import { currentUser, isAuthModalOpen } from "$lib/auth-stores";
   import { canvasApi, CanvasAPIError } from "$lib/api/canvas";
   import ColorPicker from 'svelte-awesome-color-picker';
@@ -9,91 +18,6 @@
   let fileInput: HTMLInputElement;
   let uploading = false;
   let uploadError = "";
-  
-  let activeType: 'fixed' | 'custom' | null = 'fixed';
-  let activeIndex = 0; // Default to first fixed color
-
-  $: updateActiveSlotFromStore($selectedColor);
-
-  function updateActiveSlotFromStore(color: string) {
-    const normColor = color.toUpperCase();
-    
-    if (activeType === 'fixed' && fixedColors[activeIndex]?.toUpperCase() === normColor) return;
-    if (activeType === 'custom' && $customColors[activeIndex]?.toUpperCase() === normColor) return;
-
-    const fixedIndex = fixedColors.findIndex(c => c.toUpperCase() === normColor);
-    if (fixedIndex !== -1) {
-      activeType = 'fixed';
-      activeIndex = fixedIndex;
-      return;
-    }
-
-    const customIndex = $customColors.findIndex(c => c.toUpperCase() === normColor);
-    if (customIndex !== -1) {
-      activeType = 'custom';
-      activeIndex = customIndex;
-      return;
-    }
-    
-    if (activeType === 'custom' && activeIndex !== -1) {
-      $customColors[activeIndex] = normColor;
-    } else {
-      let targetIndex = $customColors.findIndex(c => c === "#222222");
-      
-      if (targetIndex === -1) {
-          $customColors = [normColor, ...$customColors.slice(0, 9)];
-          targetIndex = 0;
-      } else {
-          $customColors[targetIndex] = normColor;
-      }
-      
-      activeType = 'custom';
-      activeIndex = targetIndex;
-    }
-  }
-
-  function handleInput(newHex: string | null) {
-    if (!newHex || !isValidHex(newHex)) return;
-
-    const normalizedHex = newHex.toUpperCase();
-    if (normalizedHex === $selectedColor.toUpperCase()) return;
-
-    if (activeType === 'custom' && activeIndex !== -1) {
-      // We are already on a custom slot -> update it in place
-      $customColors[activeIndex] = normalizedHex;
-      selectedColor.set(normalizedHex);
-    } else {
-      // We are on a Fixed slot or No slot -> move to a custom slot
-      let targetIndex = $customColors.findIndex(c => c === "#222222");
-      
-      if (targetIndex === -1) {
-        $customColors = [normalizedHex, ...$customColors.slice(0, 9)];
-        targetIndex = 0;
-      } else {
-        $customColors[targetIndex] = normalizedHex;
-      }
-
-      activeType = 'custom';
-      activeIndex = targetIndex;
-      selectedColor.set(normalizedHex);
-    }
-  }
-
-  function isValidHex(h: string) {
-    return /^#[0-9A-F]{6}$/i.test(h);
-  }
-
-  function pickFixed(index: number, color: string) {
-    selectedColor.set(color);
-    activeType = 'fixed';
-    activeIndex = index;
-  }
-
-  function pickCustom(index: number, color: string) {
-    selectedColor.set(color);
-    activeType = 'custom';
-    activeIndex = index;
-  }
 
   function togglePipette() {
     pipetteMode.update(v => !v);
@@ -121,21 +45,15 @@
 
     uploading = true;
     uploadError = "";
-
     try {
       await canvasApi.overwriteWithImage(file);
-      
       if (onCanvasUpdate) {
         await onCanvasUpdate();
       }
     } catch (err) {
-      if (err instanceof CanvasAPIError) {
-        if (err.statusCode === 401) {
+      if (err instanceof CanvasAPIError && err.statusCode === 401) {
           currentUser.set(null);
           isAuthModalOpen.set(true);
-        } else {
-          uploadError = "Upload failed";
-        }
       } else {
         uploadError = "Upload failed";
       }
@@ -149,30 +67,30 @@
 
 <div class="color-hotbar">
   <div class="controls-container">
-    <!-- Left Side: Color Rows -->
     <div class="palette-area">
-      <!-- Row 1: Fixed Colors -->
       <div class="swatch-row">
         {#each fixedColors as c, i}
           <button
-            class="swatch { activeType === 'fixed' && activeIndex === i ? 'active' : '' }"
-            title={c}
+            class="swatch"
+            class:active={$activeSlot.type === 'fixed' && $activeSlot.index === i}
             style="background: {c}"
-            on:click={() => pickFixed(i, c)}
+            on:click={() => selectSlot('fixed', i)}
             aria-label={"fixed color " + c}
+            title={c}
           ></button>
         {/each}
       </div>
 
-      <!-- Row 2: Custom Colors -->
       <div class="swatch-row">
         {#each $customColors as c, i}
           <button
-            class="swatch { activeType === 'custom' && activeIndex === i ? 'active' : '' }"
-            title={c === "#222222" ? "Empty slot" : c}
-            style="background: {c}"
-            on:click={() => pickCustom(i, c)}
-            aria-label={"custom color " + c}
+            class="swatch custom-swatch"
+            class:active={$activeSlot.type === 'custom' && $activeSlot.index === i}
+            class:empty={c === null}
+            style:background={c ?? 'transparent'}
+            on:click={() => selectSlot('custom', i)}
+            aria-label={c ? "custom color " + c : "empty slot"}
+            title={c ?? "Empty slot"}
           ></button>
         {/each}
       </div>
@@ -180,19 +98,19 @@
 
     <div class="divider"></div>
 
-    <!-- Right Side: Tools -->
     <div class="tools-area">
       <div class="tool-wrapper">
         <ColorPicker
           hex={$selectedColor}
-          onInput={event => handleInput(event.hex)}
+          onInput={event => updateFromColorPicker(event.hex!)}
           label=""
           isAlpha={false}
         />
       </div>
 
       <button 
-        class="tool-button { $pipetteMode ? 'active-tool' : '' }"
+        class="tool-button"
+        class:active-tool={$pipetteMode}
         on:click={togglePipette}
         title="Pipette Tool"
       >
@@ -273,6 +191,18 @@
     padding: 0;
   }
 
+  .swatch.custom-swatch.empty {
+    background:
+      linear-gradient(45deg, #ccc 25%, transparent 25%), 
+      linear-gradient(-45deg, #ccc 25%, transparent 25%), 
+      linear-gradient(45deg, transparent 75%, #ccc 75%), 
+      linear-gradient(-45deg, transparent 75%, #ccc 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+    background-color: #eee;
+    box-shadow: inset 0 0 4px rgba(0,0,0,0.1);
+  }
+
   .swatch:hover {
     transform: scale(1.1);
     z-index: 1;
@@ -313,7 +243,7 @@
 
   /* Specific overrides for svelte-awesome-color-picker internals */
   :global(.color-picker-wrapper) {
-    display: flex !important; 
+    display: flex !important;
   }
   
   :global(.vacp-color-picker) {

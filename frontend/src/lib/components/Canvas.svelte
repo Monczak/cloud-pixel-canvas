@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { hovered, view, selectedColor, pipetteMode } from "$lib/stores";
+  import { hovered, view, selectedColor, pipetteMode, handlePipettePick } from "$lib/stores";
   import { get as storeGet } from "svelte/store";
   
   import { canvasApi, CanvasAPIError, type PixelData } from "$lib/api/canvas";
@@ -31,7 +31,6 @@
   let hasPanned = false;
   let initialTx = 0;
   let initialTy = 0;
-
   let dpr = 1;
   let addedWindowListeners = false;
   let ws: WebSocket | null = null;
@@ -53,7 +52,6 @@
   async function fetchCanvas() {
     try {
       const canvasState = await canvasApi.getCanvas();
-
       logicalWidth = canvasState.canvas_width;
       logicalHeight = canvasState.canvas_height;
       pixels = canvasState.pixels ?? {};
@@ -106,7 +104,6 @@
     const worldH = logicalHeight * scale;
 
     const slack = 30;
-
     const limit = (world: number, css: number) =>
       world >= css
         ? [css - world, 0]
@@ -189,7 +186,6 @@
   function handlePointerDown(e: PointerEvent) {
     const target = e.target as HTMLElement;
     const isCanvasClick = target === canvasEl || target === overlayEl || target === containerEl;
-    
     if (!isCanvasClick) {
       return; 
     }
@@ -217,7 +213,6 @@
         clientX: e.clientX,
         clientY: e.clientY
       });
-
       if (pixelData?.userId) {
         hoveredUsername = await authApi.getUsernameById(pixelData.userId);
       }
@@ -286,7 +281,6 @@
     scale = clampScale(Math.max(1, fitScale * 0.95));
     tx = (cssW - logicalWidth * scale) / 2;
     ty = (cssH - logicalHeight * scale) / 2;
-
     initialTx = tx;
     initialTy = ty;
     hasPanned = false;
@@ -297,7 +291,6 @@
 
   async function handleClick(e: MouseEvent) {
     if (e.button !== 0) return;
-    
     const target = e.target as HTMLElement;
     const isCanvasClick = target === canvasEl || target === overlayEl || target === containerEl;
     if (!isCanvasClick) return;
@@ -307,6 +300,7 @@
     const l = screenToLogical(e.clientX, e.clientY);
     const lx = Math.floor(l.x);
     const ly = Math.floor(l.y);
+
     if (lx < 0 || lx >= logicalWidth || ly < 0 || ly >= logicalHeight) return;
 
     const isPipette = storeGet(pipetteMode);
@@ -314,10 +308,10 @@
     if (isPipette) {
       const key = `${lx}_${ly}`;
       const pixel = pixels[key];
-      
       const colorToPick = pixel ? pixel.color : "#FFFFFF";
       
-      selectedColor.set(colorToPick);
+      // Use the centralized logic for picking a color via pipette
+      handlePipettePick(colorToPick);
       pipetteMode.set(false);
       return;
     }
@@ -352,7 +346,7 @@
         delete pixels[key];
       }
       draw();
-
+      
       if (err instanceof CanvasAPIError && err.statusCode === 401) {  
         currentUser.set(null);
         isAuthModalOpen.set(true);
@@ -365,11 +359,9 @@
   function setupWebSocket() {
     try {
       ws = canvasApi.createWebSocket();
-
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
-          
           if (msg.intent === "pixel") {
             const p = msg.payload as PixelData;
             pixels[`${p.x}_${p.y}`] = p;
@@ -460,7 +452,6 @@
       <div class="tooltip" style="left: {$hovered.clientX}px; top: {$hovered.clientY}px">
         <div><strong>Pixel</strong> {$hovered.x}, {$hovered.y}</div>
         {#if $hovered.data.timestamp === 0}
-           <!-- Optimistic pixel -->
            <div><strong>Placed by</strong> {$currentUser?.username || 'You'}</div>
            <div>Just now</div>
         {:else}

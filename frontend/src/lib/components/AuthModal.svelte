@@ -47,24 +47,33 @@
     }
   }
 
+  function validatePassword(pwd: string): string | null {
+    if (pwd.length < 8) return "Password must be at least 8 characters";
+    if (!/[A-Z]/.test(pwd)) return "Password must contain an uppercase letter";
+    if (!/[a-z]/.test(pwd)) return "Password must contain a lowercase letter";
+    if (!/[0-9]/.test(pwd)) return "Password must contain a number";
+    return null;
+  }
+
   async function handleRegister() {
     if (!email || !username || !password || !confirmPassword) {
       error = "Please fill in all fields";
       return;
     }
 
-    if (password !== confirmPassword) {
-      error = "Passwords do not match";
-      return;
-    }
-
-    if (password.length < 8) {
-      error = "Password must be at least 8 characters";
-      return;
-    }
-
     if (username.length < 3) {
       error = "Username must be at least 3 characters";
+      return;
+    }
+
+    const pwdError = validatePassword(password);
+    if (pwdError) {
+      error = pwdError;
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      error = "Passwords do not match";
       return;
     }
 
@@ -134,6 +143,7 @@
 <Modal isOpen={$isAuthModalOpen} onClose={closeModal} title={modalTitle}>
   {#if $authModalMode === "login"}
     <form
+      novalidate
       on:submit={(e) => {
         e.preventDefault();
         handleLogin();
@@ -178,6 +188,7 @@
     </form>
   {:else if $authModalMode === "register"}
     <form
+      novalidate
       on:submit={(e) => {
         e.preventDefault();
         handleRegister();
@@ -201,8 +212,6 @@
           type="text"
           bind:value={username}
           placeholder="username"
-          minlength="3"
-          maxlength="20"
           disabled={loading}
         />
       </div>
@@ -214,9 +223,11 @@
           type="password"
           bind:value={password}
           placeholder="••••••••"
-          minlength="8"
           disabled={loading}
         />
+        <div class="help-text">
+          Min 8 chars, 1 uppercase, 1 number
+        </div>
       </div>
 
       <div class="form-group">
@@ -251,6 +262,7 @@
       Enter it below to complete registration.
     </p>
     <form
+      novalidate
       on:submit={(e) => {
         e.preventDefault();
         handleVerify();
@@ -314,6 +326,12 @@
   input:disabled {
     background: rgba(0, 0, 0, 0.05);
     cursor: not-allowed;
+  }
+
+  .help-text {
+    font-size: 12px;
+    color: rgba(0,0,0,0.5);
+    margin-top: 4px;
   }
 
   .submit-button {

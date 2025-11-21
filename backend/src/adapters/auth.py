@@ -64,7 +64,7 @@ class CognitoAuthAdapter(AuthAdapter):
         try:
             response = await self.cognito.list_users(
                 UserPoolId=self.user_pool_id,
-                Filter=f"username = {username}" # [TODO] Check if preferred_username should be here
+                Filter=f'preferred_username = "{username}"'
             )
             return len(response.get("Users", [])) > 0
         except ClientError as e:
@@ -231,7 +231,7 @@ class CognitoAuthAdapter(AuthAdapter):
         try:
             response = await self.cognito.list_users(
                 UserPoolId=self.user_pool_id,
-                Filter=f"sub = '{user_id}'"
+                Filter=f'sub = "{user_id}"'
             )
             
             users = response.get("Users", [])

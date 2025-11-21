@@ -19,11 +19,9 @@ async def lifespan(app: FastAPI):
 
     match config.environment:
         case "aws":
-            async with (
-                session.resource("dynamodb", region_name=config.aws_region),
-                session.client("cognito-idp", region_name=config.aws_region),
-                session.client("s3", region_name=config.aws_region) # type: ignore
-            ) as (dynamodb, cognito, s3):
+            async with session.resource("dynamodb", region_name=config.aws_region) as dynamodb, \
+                session.client("cognito-idp", region_name=config.aws_region) as cognito, \
+                session.client("s3", region_name=config.aws_region) as s3:
                 dep_manager.db = DynamoDBAdapter(dynamodb)
                 dep_manager.auth = CognitoAuthAdapter(cognito)
                 dep_manager.storage = S3StorageAdapter(s3)

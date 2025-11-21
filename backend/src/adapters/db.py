@@ -5,7 +5,6 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
-import aioboto3
 from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 from pymongo import AsyncMongoClient
@@ -50,8 +49,8 @@ class DBAdapter(ABC):
         pass
 
 class DynamoDBAdapter(DBAdapter):
-    def __init__(self):
-        self.session = aioboto3.Session()
+    def __init__(self, dynamodb_client):
+        self.dynamodb = dynamodb_client
         self.canvas_table = config.dynamodb_canvas_table
         self.snapshots_table = config.dynamodb_snapshots_table
         self.snapshot_tiles_table = config.dynamodb_snapshot_tiles_table
@@ -63,20 +62,19 @@ class DynamoDBAdapter(DBAdapter):
     async def get_canvas_state(self) -> Dict:
         # Aggregate pixels across tile items (canvas_id startswith "main#")
         pixels: Dict = {}
-        async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
-            table = await dynamodb.Table(self.canvas_table)
-            try:
-                response = await table.scan(
-                    FilterExpression=Attr("canvas_id").begins_with("main")
-                )
-                items = response.get("Items", [])
-                for item in items:
-                    item_pixels = item.get("pixels", {}) or {}
-                    pixels.update(item_pixels)
-                return pixels
-            except ClientError as e:
-                print(f"Error getting canvas state: {e}")
-                return {}
+        table = await self.dynamodb.Table(self.canvas_table)
+        try:
+            response = await table.scan(
+                FilterExpression=Attr("canvas_id").begins_with("main")
+            )
+            items = response.get("Items", [])
+            for item in items:
+                item_pixels = item.get("pixels", {}) or {}
+                pixels.update(item_pixels)
+            return pixels
+        except ClientError as e:
+            print(f"Error getting canvas state: {e}")
+            return {}
     
     async def update_pixel(self, x: int, y: int, color: str, user_id: str | None = None) -> Dict:
         pixel_key = f"{x}_{y}"
@@ -97,60 +95,59 @@ class DynamoDBAdapter(DBAdapter):
         ty = y // self.tile_size
         tile_canvas_id = f"main#{tx}_{ty}"
 
-        async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
-            table = await dynamodb.Table(self.canvas_table)
-            try:
-                # Try nested update to tile item
-                await table.update_item(
-                    Key={"canvas_id": tile_canvas_id},
-                    UpdateExpression="SET #pixels.#pk = :pixel, #lm = :ts",
-                    ExpressionAttributeNames={
-                        "#pixels": "pixels",
-                        "#pk": pixel_key,
-                        "#lm": "lastModified",
-                    },
-                    ExpressionAttributeValues={
-                        ":pixel": pixel_data,
-                        ":ts": timestamp,
-                    },
-                )
-            except ClientError as e:
-                err_code = e.response.get("Error", {}).get("Code", "")
-                err_msg = e.response.get("Error", {}).get("Message", "") or ""
-                # If tile item or parent map missing, create it then retry
-                if err_code == "ValidationException" and ("overlap" in err_msg.lower() or "invalid" in err_msg.lower()):
-                    try:
-                        await table.update_item(
-                            Key={"canvas_id": tile_canvas_id},
-                            UpdateExpression="SET #pixels = :empty_map",
-                            ConditionExpression="attribute_not_exists(#pixels)",
-                            ExpressionAttributeNames={"#pixels": "pixels"},
-                            ExpressionAttributeValues={":empty_map": {}},
-                        )
-                    except ClientError:
-                        # ignore conditional failure - someone else created it
-                        pass
+        table = await self.dynamodb.Table(self.canvas_table)
+        try:
+            # Try nested update to tile item
+            await table.update_item(
+                Key={"canvas_id": tile_canvas_id},
+                UpdateExpression="SET #pixels.#pk = :pixel, #lm = :ts",
+                ExpressionAttributeNames={
+                    "#pixels": "pixels",
+                    "#pk": pixel_key,
+                    "#lm": "lastModified",
+                },
+                ExpressionAttributeValues={
+                    ":pixel": pixel_data,
+                    ":ts": timestamp,
+                },
+            )
+        except ClientError as e:
+            err_code = e.response.get("Error", {}).get("Code", "")
+            err_msg = e.response.get("Error", {}).get("Message", "") or ""
+            # If tile item or parent map missing, create it then retry
+            if err_code == "ValidationException" and ("overlap" in err_msg.lower() or "invalid" in err_msg.lower()):
+                try:
+                    await table.update_item(
+                        Key={"canvas_id": tile_canvas_id},
+                        UpdateExpression="SET #pixels = :empty_map",
+                        ConditionExpression="attribute_not_exists(#pixels)",
+                        ExpressionAttributeNames={"#pixels": "pixels"},
+                        ExpressionAttributeValues={":empty_map": {}},
+                    )
+                except ClientError:
+                    # ignore conditional failure - someone else created it
+                    pass
 
-                    try:
-                        await table.update_item(
-                            Key={"canvas_id": tile_canvas_id},
-                            UpdateExpression="SET #pixels.#pk = :pixel, #lm = :ts",
-                            ExpressionAttributeNames={
-                                "#pixels": "pixels",
-                                "#pk": pixel_key,
-                                "#lm": "lastModified",
-                            },
-                            ExpressionAttributeValues={
-                                ":pixel": pixel_data,
-                                ":ts": timestamp,
-                            },
-                        )
-                    except ClientError as e2:
-                        print(f"Error updating pixel after ensuring tile: {e2}")
-                        raise ValueError(f"Failed to update pixel: {e2}")
-                else:
-                    print(f"Error updating pixel: {e}")
-                    raise ValueError(f"Failed to update pixel: {e}")
+                try:
+                    await table.update_item(
+                        Key={"canvas_id": tile_canvas_id},
+                        UpdateExpression="SET #pixels.#pk = :pixel, #lm = :ts",
+                        ExpressionAttributeNames={
+                            "#pixels": "pixels",
+                            "#pk": pixel_key,
+                            "#lm": "lastModified",
+                        },
+                        ExpressionAttributeValues={
+                            ":pixel": pixel_data,
+                            ":ts": timestamp,
+                        },
+                    )
+                except ClientError as e2:
+                    print(f"Error updating pixel after ensuring tile: {e2}")
+                    raise ValueError(f"Failed to update pixel: {e2}")
+            else:
+                print(f"Error updating pixel: {e}")
+                raise ValueError(f"Failed to update pixel: {e}")
 
         return pixel_data
 
@@ -171,60 +168,59 @@ class DynamoDBAdapter(DBAdapter):
             tile_id = f"{tx}_{ty}"
             tiles[tile_id][pixel_key] = pixel_data
 
-        async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
-            table = await dynamodb.Table(self.canvas_table)
-            sem = asyncio.Semaphore(self.chunk_write_concurrency)
+        table = await self.dynamodb.Table(self.canvas_table)
+        sem = asyncio.Semaphore(self.chunk_write_concurrency)
 
-            async def _write_chunk_for_tile(tile_id: str, chunk_items: List[Tuple[str, Dict]]):
-                async with sem:
-                    key = {"canvas_id": f"main#{tile_id}"}
+        async def _write_chunk_for_tile(tile_id: str, chunk_items: List[Tuple[str, Dict]]):
+            async with sem:
+                key = {"canvas_id": f"main#{tile_id}"}
 
-                    # ensure parent map exists
-                    try:
-                        await table.update_item(
-                            Key=key,
-                            UpdateExpression="SET #pixels = :empty_map",
-                            ConditionExpression="attribute_not_exists(#pixels)",
-                            ExpressionAttributeNames={"#pixels": "pixels"},
-                            ExpressionAttributeValues={":empty_map": {}},
-                        )
-                    except ClientError:
-                        pass
+                # ensure parent map exists
+                try:
+                    await table.update_item(
+                        Key=key,
+                        UpdateExpression="SET #pixels = :empty_map",
+                        ConditionExpression="attribute_not_exists(#pixels)",
+                        ExpressionAttributeNames={"#pixels": "pixels"},
+                        ExpressionAttributeValues={":empty_map": {}},
+                    )
+                except ClientError:
+                    pass
 
-                    attr_names = {"#pixels": "pixels", "#lm": "lastModified"}
-                    attr_values: Dict[str, Any] = {":ts": timestamp}
-                    parts = []
+                attr_names = {"#pixels": "pixels", "#lm": "lastModified"}
+                attr_values: Dict[str, Any] = {":ts": timestamp}
+                parts = []
 
-                    for idx, (pkey, pdata) in enumerate(chunk_items):
-                        name_key = f"#pk{idx}"
-                        value_key = f":pv{idx}"
-                        parts.append(f"#pixels.{name_key} = {value_key}")
-                        attr_names[name_key] = pkey
-                        attr_values[value_key] = pdata
+                for idx, (pkey, pdata) in enumerate(chunk_items):
+                    name_key = f"#pk{idx}"
+                    value_key = f":pv{idx}"
+                    parts.append(f"#pixels.{name_key} = {value_key}")
+                    attr_names[name_key] = pkey
+                    attr_values[value_key] = pdata
 
-                    update_expr = f"SET {', '.join(parts)}, #lm = :ts"
+                update_expr = f"SET {', '.join(parts)}, #lm = :ts"
 
-                    try:
-                        await table.update_item(
-                            Key=key,
-                            UpdateExpression=update_expr,
-                            ExpressionAttributeNames=attr_names,
-                            ExpressionAttributeValues=attr_values,
-                        )
-                    except ClientError as e:
-                        print(f"Error bulk updating tile {tile_id} chunk: {e}")
-                        raise ValueError(f"Failed to bulk update canvas tile {tile_id}: {e}")
+                try:
+                    await table.update_item(
+                        Key=key,
+                        UpdateExpression=update_expr,
+                        ExpressionAttributeNames=attr_names,
+                        ExpressionAttributeValues=attr_values,
+                    )
+                except ClientError as e:
+                    print(f"Error bulk updating tile {tile_id} chunk: {e}")
+                    raise ValueError(f"Failed to bulk update canvas tile {tile_id}: {e}")
 
-            # build tasks per tile/chunk
-            tasks = []
-            for tile_id, tile_pixels in tiles.items():
-                items = list(tile_pixels.items())
-                for i in range(0, len(items), self.chunk_size):
-                    chunk = items[i:i + self.chunk_size]
-                    tasks.append(asyncio.create_task(_write_chunk_for_tile(tile_id, chunk)))
+        # build tasks per tile/chunk
+        tasks = []
+        for tile_id, tile_pixels in tiles.items():
+            items = list(tile_pixels.items())
+            for i in range(0, len(items), self.chunk_size):
+                chunk = items[i:i + self.chunk_size]
+                tasks.append(asyncio.create_task(_write_chunk_for_tile(tile_id, chunk)))
 
-            if tasks:
-                await asyncio.gather(*tasks)
+        if tasks:
+            await asyncio.gather(*tasks)
         
     async def bulk_overwrite_canvas(self, pixels: Dict) -> None:
         tiles: Dict[str, Dict] = defaultdict(dict)
@@ -241,82 +237,79 @@ class DynamoDBAdapter(DBAdapter):
             tile_id = f"{tx}_{ty}"
             tiles[tile_id][pixel_key] = pixel_data
 
-        async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
-            table = await dynamodb.Table(self.canvas_table)
-            try:
-                # write/replace each tile item
-                for tile_id, tile_pixels in tiles.items():
-                    await table.put_item(
-                        Item={
-                            "canvas_id": f"main#{tile_id}",
-                            "pixels": tile_pixels,
-                            "lastModified": int(datetime.now().timestamp())
-                        }
-                    )
+        table = await self.dynamodb.Table(self.canvas_table)
+        try:
+            # write/replace each tile item
+            for tile_id, tile_pixels in tiles.items():
+                await table.put_item(
+                    Item={
+                        "canvas_id": f"main#{tile_id}",
+                        "pixels": tile_pixels,
+                        "lastModified": int(datetime.now().timestamp())
+                    }
+                )
 
-                # scan existing tile items and delete tiles not in the new set
-                resp = await table.scan(FilterExpression=Attr("canvas_id").begins_with("main#"))
-                items = resp.get("Items", [])
-                keep_ids = set(f"main#{tid}" for tid in tiles.keys())
-                for it in items:
-                    cid = it.get("canvas_id")
-                    if cid not in keep_ids:
-                        try:
-                            await table.delete_item(Key={"canvas_id": cid})
-                        except ClientError:
-                            pass
-            except ClientError as e:
-                print(f"Error overwriting canvas: {e}")
-                raise ValueError(f"Failed to overwrite canvas: {e}")
+            # scan existing tile items and delete tiles not in the new set
+            resp = await table.scan(FilterExpression=Attr("canvas_id").begins_with("main#"))
+            items = resp.get("Items", [])
+            keep_ids = set(f"main#{tid}" for tid in tiles.keys())
+            for it in items:
+                cid = it.get("canvas_id")
+                if cid not in keep_ids:
+                    try:
+                        await table.delete_item(Key={"canvas_id": cid})
+                    except ClientError:
+                        pass
+        except ClientError as e:
+            print(f"Error overwriting canvas: {e}")
+            raise ValueError(f"Failed to overwrite canvas: {e}")
             
     async def create_snapshot(self, snapshot_id: str, image_key: str, thumbnail_key: str) -> Dict:
-        async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
-            canvas_table = await dynamodb.Table(self.canvas_table)
-            snapshots_table = await dynamodb.Table(self.snapshots_table)
-            tiles_table = await dynamodb.Table(self.snapshot_tiles_table)
+        canvas_table = await self.dynamodb.Table(self.canvas_table)
+        snapshots_table = await self.dynamodb.Table(self.snapshots_table)
+        tiles_table = await self.dynamodb.Table(self.snapshot_tiles_table)
 
-            try:
-                # Read current tiles from canvas (items whose canvas_id starts with "main#")
-                resp = await canvas_table.scan(FilterExpression=Attr("canvas_id").begins_with("main#"))
-                items = resp.get("Items", [])
+        try:
+            # Read current tiles from canvas (items whose canvas_id starts with "main#")
+            resp = await canvas_table.scan(FilterExpression=Attr("canvas_id").begins_with("main#"))
+            items = resp.get("Items", [])
 
-                # Write snapshot metadata (small item)
-                metadata = {
-                    "snapshot_id": snapshot_id,
-                    "image_key": image_key,
-                    "thumbnail_key": thumbnail_key,
-                    "canvas_width": config.canvas_width,
-                    "canvas_height": config.canvas_height,
-                    "created_at": datetime.now().isoformat(),
-                }
-                await snapshots_table.put_item(Item=metadata)
+            # Write snapshot metadata (small item)
+            metadata = {
+                "snapshot_id": snapshot_id,
+                "image_key": image_key,
+                "thumbnail_key": thumbnail_key,
+                "canvas_width": config.canvas_width,
+                "canvas_height": config.canvas_height,
+                "created_at": datetime.now().isoformat(),
+            }
+            await snapshots_table.put_item(Item=metadata)
 
-                # Write each tile as a separate item under the snapshot_tiles table
-                # key: (snapshot_id, tile_id), attribute: pixels
-                # chunking: do a small batch of put_item calls concurrently to avoid bursts
-                import asyncio
-                sem = asyncio.Semaphore(8)
-                async def _put_tile(tile_item):
-                    async with sem:
-                        cid = tile_item.get("canvas_id", "")
-                        if "#" in cid:
-                            tile_id = cid.split("#", 1)[1]
-                        else:
-                            tile_id = "0_0"
-                        tile_pixels = tile_item.get("pixels", {}) or {}
-                        await tiles_table.put_item(Item={
-                            "snapshot_id": snapshot_id,
-                            "tile_id": tile_id,
-                            "pixels": tile_pixels
-                        })
+            # Write each tile as a separate item under the snapshot_tiles table
+            # key: (snapshot_id, tile_id), attribute: pixels
+            # chunking: do a small batch of put_item calls concurrently to avoid bursts
+            sem = asyncio.Semaphore(8)
+            async def _put_tile(tile_item):
+                async with sem:
+                    cid = tile_item.get("canvas_id", "")
+                    if "#" in cid:
+                        tile_id = cid.split("#", 1)[1]
+                    else:
+                        tile_id = "0_0"
+                    tile_pixels = tile_item.get("pixels", {}) or {}
+                    await tiles_table.put_item(Item={
+                        "snapshot_id": snapshot_id,
+                        "tile_id": tile_id,
+                        "pixels": tile_pixels
+                    })
 
-                tasks = [asyncio.create_task(_put_tile(it)) for it in items]
-                if tasks:
-                    await asyncio.gather(*tasks)
+            tasks = [asyncio.create_task(_put_tile(it)) for it in items]
+            if tasks:
+                await asyncio.gather(*tasks)
 
-            except ClientError as e:
-                print(f"Error creating snapshot: {e}")
-                raise ValueError(f"Failed to create snapshot: {e}")
+        except ClientError as e:
+            print(f"Error creating snapshot: {e}")
+            raise ValueError(f"Failed to create snapshot: {e}")
 
         return {
             "snapshot_id": snapshot_id,
@@ -326,114 +319,110 @@ class DynamoDBAdapter(DBAdapter):
         }
     
     async def get_snapshots(self, limit: int = 50, offset: int = 0) -> List[Dict]:
-        async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
-            table = await dynamodb.Table(self.snapshots_table)
-            try:
-                response = await table.scan(
-                    ProjectionExpression="snapshot_id, image_key, thumbnail_key, canvas_width, canvas_height, created_at"
-                )
-                items = response.get("Items", [])
-                items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-                paginated = items[offset:offset + limit]
+        table = await self.dynamodb.Table(self.snapshots_table)
+        try:
+            response = await table.scan(
+                ProjectionExpression="snapshot_id, image_key, thumbnail_key, canvas_width, canvas_height, created_at"
+            )
+            items = response.get("Items", [])
+            items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+            paginated = items[offset:offset + limit]
 
-                snapshots = []
-                for item in paginated:
-                    snapshots.append({
-                        "snapshot_id": item["snapshot_id"],
-                        "image_key": item["image_key"],
-                        "thumbnail_key": item["thumbnail_key"],
-                        "canvas_width": item.get("canvas_width", config.canvas_width),
-                        "canvas_height": item.get("canvas_height", config.canvas_height),
-                        "created_at": item["created_at"],
-                    })
-                
-                return snapshots
-            except ClientError as e:
-                print(f"Error getting snapshots: {e}")
-                return []
+            snapshots = []
+            for item in paginated:
+                snapshots.append({
+                    "snapshot_id": item["snapshot_id"],
+                    "image_key": item["image_key"],
+                    "thumbnail_key": item["thumbnail_key"],
+                    "canvas_width": item.get("canvas_width", config.canvas_width),
+                    "canvas_height": item.get("canvas_height", config.canvas_height),
+                    "created_at": item["created_at"],
+                })
+            
+            return snapshots
+        except ClientError as e:
+            print(f"Error getting snapshots: {e}")
+            return []
     
     async def get_snapshot_by_id(self, snapshot_id: str) -> Dict | None:
-        async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
-            snapshots_table = await dynamodb.Table(self.snapshots_table)
-            tiles_table = await dynamodb.Table(self.snapshot_tiles_table)
-            try:
-                meta_resp = await snapshots_table.get_item(Key={"snapshot_id": snapshot_id})
-                if "Item" not in meta_resp:
-                    return None
-                meta = meta_resp["Item"]
-
-                # query for tiles belonging to this snapshot
-                tiles_resp = await tiles_table.query(KeyConditionExpression=Key("snapshot_id").eq(snapshot_id))
-                tile_items = tiles_resp.get("Items", [])
-
-                # normalize Decimal -> int for numeric fields so result is JSON serializable
-                pixels: Dict = {}
-                for t in tile_items:
-                    t_pixels = t.get("pixels", {}) or {}
-                    for pkey, pdata in t_pixels.items():
-                        # copy to avoid mutating original
-                        norm = dict(pdata)
-                        # convert Decimal numbers to ints where applicable
-                        for num_field in ("x", "y", "timestamp"):
-                            if num_field in norm and isinstance(norm[num_field], Decimal):
-                                norm[num_field] = int(norm[num_field])
-                        # also convert any nested numeric fields if present
-                        if "timestamp" in norm and isinstance(norm["timestamp"], Decimal):
-                            norm["timestamp"] = int(norm["timestamp"])
-                        pixels[pkey] = norm
-
-                return {
-                    "snapshot_id": meta["snapshot_id"],
-                    "pixels": pixels,
-                    "image_key": meta["image_key"],
-                    "thumbnail_key": meta["thumbnail_key"],
-                    "canvas_width": meta.get("canvas_width", config.canvas_width),
-                    "canvas_height": meta.get("canvas_height", config.canvas_height),
-                    "created_at": meta["created_at"],
-                }
-            except ClientError as e:
-                print(f"Error getting snapshot by id: {e}")
+        snapshots_table = await self.dynamodb.Table(self.snapshots_table)
+        tiles_table = await self.dynamodb.Table(self.snapshot_tiles_table)
+        try:
+            meta_resp = await snapshots_table.get_item(Key={"snapshot_id": snapshot_id})
+            if "Item" not in meta_resp:
                 return None
+            meta = meta_resp["Item"]
+
+            # query for tiles belonging to this snapshot
+            tiles_resp = await tiles_table.query(KeyConditionExpression=Key("snapshot_id").eq(snapshot_id))
+            tile_items = tiles_resp.get("Items", [])
+
+            # normalize Decimal -> int for numeric fields so result is JSON serializable
+            pixels: Dict = {}
+            for t in tile_items:
+                t_pixels = t.get("pixels", {}) or {}
+                for pkey, pdata in t_pixels.items():
+                    # copy to avoid mutating original
+                    norm = dict(pdata)
+                    # convert Decimal numbers to ints where applicable
+                    for num_field in ("x", "y", "timestamp"):
+                        if num_field in norm and isinstance(norm[num_field], Decimal):
+                            norm[num_field] = int(norm[num_field])
+                    # also convert any nested numeric fields if present
+                    if "timestamp" in norm and isinstance(norm["timestamp"], Decimal):
+                        norm["timestamp"] = int(norm["timestamp"])
+                    pixels[pkey] = norm
+
+            return {
+                "snapshot_id": meta["snapshot_id"],
+                "pixels": pixels,
+                "image_key": meta["image_key"],
+                "thumbnail_key": meta["thumbnail_key"],
+                "canvas_width": meta.get("canvas_width", config.canvas_width),
+                "canvas_height": meta.get("canvas_height", config.canvas_height),
+                "created_at": meta["created_at"],
+            }
+        except ClientError as e:
+            print(f"Error getting snapshot by id: {e}")
+            return None
     
     async def delete_snapshot(self, snapshot_id: str) -> bool:
-        async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
-            snapshots_table = await dynamodb.Table(self.snapshots_table)
-            tiles_table = await dynamodb.Table(self.snapshot_tiles_table)
-            try:
-                # delete metadata
-                await snapshots_table.delete_item(Key={"snapshot_id": snapshot_id})
+        snapshots_table = await self.dynamodb.Table(self.snapshots_table)
+        tiles_table = await self.dynamodb.Table(self.snapshot_tiles_table)
+        try:
+            # delete metadata
+            await snapshots_table.delete_item(Key={"snapshot_id": snapshot_id})
 
-                # delete per-tile items for this snapshot (query then delete)
-                # Query for tile ids and delete each one (handles potentially many tiles)
-                resp = await tiles_table.query(
-                    KeyConditionExpression=Key("snapshot_id").eq(snapshot_id),
-                    ProjectionExpression="tile_id"
-                )
-                items = resp.get("Items", []) or []
-                for it in items:
-                    tid = it.get("tile_id")
-                    if not tid:
-                        continue
-                    try:
-                        await tiles_table.delete_item(Key={"snapshot_id": snapshot_id, "tile_id": tid})
-                    except ClientError:
-                        # swallow individual delete errors and continue
-                        pass
+            # delete per-tile items for this snapshot (query then delete)
+            # Query for tile ids and delete each one (handles potentially many tiles)
+            resp = await tiles_table.query(
+                KeyConditionExpression=Key("snapshot_id").eq(snapshot_id),
+                ProjectionExpression="tile_id"
+            )
+            items = resp.get("Items", []) or []
+            for it in items:
+                tid = it.get("tile_id")
+                if not tid:
+                    continue
+                try:
+                    await tiles_table.delete_item(Key={"snapshot_id": snapshot_id, "tile_id": tid})
+                except ClientError:
+                    # swallow individual delete errors and continue
+                    pass
 
-                return True
-            except ClientError as e:
-                print(f"Error deleting snapshot: {e}")
-                return False
+            return True
+        except ClientError as e:
+            print(f"Error deleting snapshot: {e}")
+            return False
             
     async def get_snapshot_count(self) -> int:
-        async with self.session.resource("dynamodb", region_name=config.aws_region) as dynamodb:
-            table = await dynamodb.Table(self.snapshots_table)
-            try:
-                response = await table.scan(Select="COUNT")
-                return response.get("Count", 0)
-            except ClientError as e:
-                print(f"Error getting snapshot count: {e}")
-                return 0
+        table = await self.dynamodb.Table(self.snapshots_table)
+        try:
+            response = await table.scan(Select="COUNT")
+            return response.get("Count", 0)
+        except ClientError as e:
+            print(f"Error getting snapshot count: {e}")
+            return 0
 
 class MongoDBAdapter(DBAdapter):
     def __init__(self) -> None:
@@ -640,10 +629,8 @@ class MongoDBAdapter(DBAdapter):
         return await self.snapshots_collection.count_documents({})
     
 def get_db_adapter() -> DBAdapter:
-    match config.environment:
-        case "local":
-            return MongoDBAdapter()
-        case "aws":
-            return DynamoDBAdapter()
-        
-    raise ValueError(f"Unknown environment: {config.environment}")
+    from deps import manager
+
+    if not manager.db:
+        raise RuntimeError("Database adapter not initialized")
+    return manager.db

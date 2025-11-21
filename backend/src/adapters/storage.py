@@ -6,8 +6,8 @@ from pathlib import Path
 import shutil
 from typing import BinaryIO
 
-import aioboto3
 from botocore.exceptions import ClientError
+
 from config import config
 
 @dataclass
@@ -39,65 +39,61 @@ class StorageAdapter(ABC):
         pass
 
 class S3StorageAdapter(StorageAdapter):
-    def __init__(self):
-        self.session = aioboto3.Session()
+    def __init__(self, s3_client):
+        self.s3 = s3_client
         self.bucket_name = config.s3_bucket_name
         self.region = config.aws_region
     
     async def upload_file(self, key: str, file_data: BinaryIO) -> StorageFile:
-        async with self.session.client("s3", region_name=self.region) as s3: # type: ignore
-            try:
-                file_content = file_data.read()
-                file_size = len(file_content)
+        try:
+            file_content = file_data.read()
+            file_size = len(file_content)
 
-                await s3.put_object(
-                    Bucket=self.bucket_name,
-                    Key=key,
-                    Body=file_content,
-                    ContentType="image/png"
-                )
-                
-                return StorageFile(
-                    key=key,
-                    url=self.get_file_url(key),
-                    size=file_size,
-                    created_at=datetime.now()
-                )
-            except ClientError as e:
-                print(f"Error uploading file to S3: {e}")
-                raise ValueError(f"Failed to upload file: {e}")
+            await self.s3.put_object(
+                Bucket=self.bucket_name,
+                Key=key,
+                Body=file_content,
+                ContentType="image/png"
+            )
+            
+            return StorageFile(
+                key=key,
+                url=self.get_file_url(key),
+                size=file_size,
+                created_at=datetime.now()
+            )
+        except ClientError as e:
+            print(f"Error uploading file to S3: {e}")
+            raise ValueError(f"Failed to upload file: {e}")
 
     async def download_file(self, key: str) -> bytes:
-        async with self.session.client("s3", region_name=self.region) as s3: # type: ignore
-            try:
-                response = await s3.get_object(Bucket=self.bucket_name, Key=key)
-                async with response["Body"] as stream:
-                    return await stream.read()
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "NoSuchKey":
-                    raise FileNotFoundError(f"File not found: {key}")
-                print(f"Error downloading file from S3: {e}")
-                raise ValueError(f"Failed to download file: {e}")
+        try:
+            response = await self.s3.get_object(Bucket=self.bucket_name, Key=key)
+            async with response["Body"] as stream:
+                return await stream.read()
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchKey":
+                raise FileNotFoundError(f"File not found: {key}")
+            print(f"Error downloading file from S3: {e}")
+            raise ValueError(f"Failed to download file: {e}")
 
     async def delete_file(self, key: str) -> bool:
-        async with self.session.client("s3", region_name=self.region) as s3: # type: ignore
-            try:
-                await s3.delete_object(Bucket=self.bucket_name, Key=key)
-                return True
-            except ClientError as e:
-                print(f"Error deleting file from S3: {e}")
-                return False
+        try:
+            await self.s3.delete_object(Bucket=self.bucket_name, Key=key)
+            return True
+        except ClientError as e:
+            print(f"Error deleting file from S3: {e}")
+            return False
     
     def get_file_url(self, key: str) -> str:
         return f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{key}"
     
     async def file_exists(self, key: str) -> bool:
-        async with self.session.client("s3", region_name=self.region) as s3: # type: ignore
-            try:
-                await s3.head_object(Bucket=self.bucket_name, Key=key)
-                return True
-            except ClientError:
-                return False
+        try:
+            await self.s3.head_object(Bucket=self.bucket_name, Key=key)
+            return True
+        except ClientError:
+            return False
 
 class LocalFileStorageAdapter(StorageAdapter):
     def __init__(self, base_path: PathLike | str):
@@ -149,11 +145,8 @@ class LocalFileStorageAdapter(StorageAdapter):
         return self._get_file_path(key).exists()
     
 def get_storage_adapter() -> StorageAdapter:
-    match config.environment:
-        case "local":
-            return LocalFileStorageAdapter(config.local_storage_path)
-        case "aws":
-            return S3StorageAdapter()
-        
-    raise ValueError(f"Unknown environment: {config.environment}")
-    
+    from deps import manager
+
+    if not manager.storage:
+        raise RuntimeError("Storage adapter not initialized")
+    return manager.storage

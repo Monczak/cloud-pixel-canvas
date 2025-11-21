@@ -1,13 +1,45 @@
+from contextlib import asynccontextmanager
+import aioboto3
 from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from adapters.db import DynamoDBAdapter, MongoDBAdapter
+from adapters.auth import CognitoAuthAdapter, LocalMongoAuthAdapter
+from adapters.storage import LocalFileStorageAdapter, S3StorageAdapter
 from config import config
 from routes.auth import auth_router
 from routes.canvas import canvas_router
 from routes.static import static_router
-from wsmanager import manager
+from wsmanager import manager as ws_manager
+from deps import manager as dep_manager
 
-app = FastAPI(title="Cloud Pixel Canvas API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    session = aioboto3.Session()
+
+    match config.environment:
+        case "aws":
+            async with (
+                session.resource("dynamodb", region_name=config.aws_region),
+                session.client("cognito-idp", region_name=config.aws_region),
+                session.client("s3", region_name=config.aws_region) # type: ignore
+            ) as (dynamodb, cognito, s3):
+                dep_manager.db = DynamoDBAdapter(dynamodb)
+                dep_manager.auth = CognitoAuthAdapter(cognito)
+                dep_manager.storage = S3StorageAdapter(s3)
+
+                yield
+        case "local":
+            dep_manager.db = MongoDBAdapter()
+            dep_manager.auth = LocalMongoAuthAdapter(config.mongo_uri, config.mongo_db)
+            dep_manager.storage = LocalFileStorageAdapter(config.local_storage_path)
+
+            yield
+        case _:
+            raise ValueError(f"Unknown environment: {config.environment}")        
+
+
+app = FastAPI(title="Cloud Pixel Canvas API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,13 +57,13 @@ async def root():
 
 @api_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
+    await ws_manager.connect(websocket)
     try:
         while True:
             # keep the connection alive; clients don't need to send data
             await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        ws_manager.disconnect(websocket)
 
 api_router.include_router(auth_router)
 api_router.include_router(canvas_router)

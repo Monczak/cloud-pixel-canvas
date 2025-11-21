@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import Modal from "./Modal.svelte";
   import { canvasApi, type Snapshot } from "$lib/api/canvas";
 
@@ -42,14 +41,25 @@
 
   async function handleDownload(snapshot: Snapshot) {
     try {
-      const link = document.createElement("a");
-      link.href = snapshot.image_url;
-      link.download = snapshot.snapshot_id + ".png";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+        const response = await fetch(snapshot.image_url);
+        if (!response.ok) throw new Error('Download failed');
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `snapshot_${snapshot.snapshot_id}.png`;
+        document.body.appendChild(link);
+        link.click();
+        
+        window.URL.revokeObjectURL(url);
+        link.remove();
     } catch (err) {
-      console.error("Download failed:", err);
+        console.error("Download failed:", err);
+
+        // Fallback to opening in new tab
+        window.open(snapshot.image_url, '_blank');
     }
   }
 

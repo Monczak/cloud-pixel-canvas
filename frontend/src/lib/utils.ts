@@ -1,8 +1,14 @@
-import { recentColors } from "$lib/stores";
+import { customColors, fixedColors } from "$lib/stores";
+import { get } from "svelte/store";
 
-export function pushRecentColor(color: string) {
-  recentColors.update((list) => [
-    color,
-    ...list.filter((c) => c !== color)
-  ].slice(0, 8));
+export function pushToCustomPalette(newColor: string) {
+  const currentCustom = get(customColors);
+  
+  if (fixedColors.includes(newColor)) return;
+
+  if (!currentCustom.includes(newColor)) {
+      customColors.update(colors => {
+          return [newColor, ...colors.slice(0, 9)];
+      });
+  }
 }

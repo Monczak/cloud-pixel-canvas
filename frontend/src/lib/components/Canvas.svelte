@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { hovered, view, selectedColor } from "$lib/stores";
+  import { hovered, view, selectedColor, pipetteMode } from "$lib/stores";
   import { get as storeGet } from "svelte/store";
-  import { pushRecentColor } from "$lib/utils";
-
+  
   import { canvasApi, CanvasAPIError, type PixelData } from "$lib/api/canvas";
   import { authApi } from "$lib/api/auth";
   import { currentUser, isAuthModalOpen } from "$lib/auth-stores";
@@ -188,6 +187,13 @@
   }
 
   function handlePointerDown(e: PointerEvent) {
+    const target = e.target as HTMLElement;
+    const isCanvasClick = target === canvasEl || target === overlayEl || target === containerEl;
+    
+    if (!isCanvasClick) {
+      return; 
+    }
+
     containerEl.setPointerCapture?.(e.pointerId);
     hasPanned = false;
     dragging = true;
@@ -240,8 +246,10 @@
   }
 
   function handlePointerUp(e: PointerEvent) {
-    containerEl.releasePointerCapture?.(e.pointerId);
-    dragging = false;
+    if (dragging) {
+        containerEl.releasePointerCapture?.(e.pointerId);
+        dragging = false;
+    }
   }
 
   function handlePointerLeave() {
@@ -289,12 +297,30 @@
 
   async function handleClick(e: MouseEvent) {
     if (e.button !== 0) return;
+    
+    const target = e.target as HTMLElement;
+    const isCanvasClick = target === canvasEl || target === overlayEl || target === containerEl;
+    if (!isCanvasClick) return;
+
     if (hasPanned) return;
 
     const l = screenToLogical(e.clientX, e.clientY);
     const lx = Math.floor(l.x);
     const ly = Math.floor(l.y);
     if (lx < 0 || lx >= logicalWidth || ly < 0 || ly >= logicalHeight) return;
+
+    const isPipette = storeGet(pipetteMode);
+
+    if (isPipette) {
+      const key = `${lx}_${ly}`;
+      const pixel = pixels[key];
+      
+      const colorToPick = pixel ? pixel.color : "#FFFFFF";
+      
+      selectedColor.set(colorToPick);
+      pipetteMode.set(false);
+      return;
+    }
 
     const user = storeGet(currentUser);
     if (!user) {
@@ -304,26 +330,22 @@
 
     const color = storeGet(selectedColor) ?? "#0000FF";
     const key = `${lx}_${ly}`;
-    const previousPixel = pixels[key]; // Backup for optimistic rollback
+    const previousPixel = pixels[key]; 
 
-    // Optimistic UI update
     pixels[key] = {
       x: lx,
       y: ly,
       color: color,
       userId: user.user_id,
-      timestamp: 0 // 0 indicates "Just now" / pending
+      timestamp: 0
     };
     draw();
-    pushRecentColor(color);
 
     try {
       const pixelData = await canvasApi.placePixel(lx, ly, color);
-      // Confirm update with server data
       pixels[key] = pixelData;
       draw();
     } catch (err) {
-      // Revert on failure
       if (previousPixel) {
         pixels[key] = previousPixel;
       } else {
@@ -425,7 +447,7 @@
   });
 </script>
 
-<div bind:this={containerEl} class="container">
+<div bind:this={containerEl} class="container" class:pipette-cursor={$pipetteMode}>
   <canvas bind:this={canvasEl} style="z-index:1; position:absolute; left:0; top:0;"></canvas>
   <canvas bind:this={overlayEl} style="z-index:2; position:absolute; left:0; top:0; pointer-events:none;"></canvas>
 
@@ -438,7 +460,7 @@
       <div class="tooltip" style="left: {$hovered.clientX}px; top: {$hovered.clientY}px">
         <div><strong>Pixel</strong> {$hovered.x}, {$hovered.y}</div>
         {#if $hovered.data.timestamp === 0}
-           <!-- Optimistic Pixel -->
+           <!-- Optimistic pixel -->
            <div><strong>Placed by</strong> {$currentUser?.username || 'You'}</div>
            <div>Just now</div>
         {:else}
@@ -460,6 +482,11 @@
     touch-action: none;
     background: #181a1c;
   }
+  
+  .container.pipette-cursor {
+    cursor: crosshair !important;
+  }
+
   canvas {
     image-rendering: pixelated;
     display: block;

@@ -111,21 +111,18 @@
 
     <div class="tools-area">
       
-      <div class="relative-tool">
+      <div class="relative-tool" use:clickOutside={closeColorPicker}>
         <button 
           class="icon-btn tool-btn"
           class:active-tool={showColorPicker}
-          on:click|stopPropagation={toggleColorPicker}
+          on:click={toggleColorPicker}
           title="Color Picker"
         >
           🎨
         </button>
 
         {#if showColorPicker}
-          <div 
-            class="picker-popover glass-panel" 
-            use:clickOutside={closeColorPicker}
-          >
+          <div class="picker-popover glass-panel">
             <ColorPicker
               hex={$selectedColor}
               onInput={event => updateFromColorPicker(event.hex!)}
@@ -262,12 +259,12 @@
     transform: translateX(-50%);
     padding: 8px;
     z-index: 1000;
-    
+
     --cp-bg-color: transparent;
     --cp-border-color: transparent;
     --cp-input-color: #f3f4f6;
     --cp-text-color: #333333;
-
+    
     color: #333333;
   }
 

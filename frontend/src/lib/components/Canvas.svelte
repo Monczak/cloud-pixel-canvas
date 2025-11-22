@@ -248,10 +248,13 @@
     if (lx >= 0 && lx < logicalWidth && ly >= 0 && ly < logicalHeight) {
       const key = `${lx}_${ly}`;
       const pixelData = pixels[key];
+      const color = pixelData ? pixelData.color : "#FFFFFF";
+
       hovered.set({
         x: lx,
         y: ly,
         data: pixelData,
+        color,
         clientX: e.clientX,
         clientY: e.clientY
       });
@@ -420,7 +423,6 @@
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
-          
           if (msg.intent === "pixel") {
             const p = msg.payload as PixelData;
             pixels[`${p.x}_${p.y}`] = p;
@@ -430,7 +432,6 @@
               offscreenCtx.fillRect(p.x, p.y, 1, 1);
             }
             draw();
-
           } else if (msg.intent === "bulk_update") {
             const bulkPixels = msg.payload.pixels;
             for (const [key, pixelData] of Object.entries(bulkPixels)) {
@@ -438,7 +439,6 @@
             }
             redrawOffscreen();
             draw();
-
           } else if (msg.intent === "bulk_overwrite") {
             const bulkPixels = msg.payload.pixels;
             pixels = {};
@@ -517,19 +517,30 @@
     <slot />
   </div>
 
-  {#if $hovered && $hovered.data}
+  {#if $hovered && ($hovered.data || $pipetteMode)}
     {#key $hovered.clientX + "-" + $hovered.clientY}
       <div class="glass-panel tooltip" style="left: {$hovered.clientX}px; top: {$hovered.clientY}px">
-        <div><strong>Pixel</strong> {$hovered.x}, {$hovered.y}</div>
-        {#if $hovered.data.timestamp === 0}
-           <div><strong>Placed by</strong> {$currentUser?.username || 'You'}</div>
-           <div>Just now</div>
+        
+        {#if $pipetteMode}
+           <div class="pipette-row">
+             <div class="preview-swatch" style="background: {$hovered.color}"></div>
+             <span class="hex-code">{$hovered.color.toUpperCase()}</span>
+           </div>
+           <div class="coords">Pixel {$hovered.x}, {$hovered.y}</div>
+
         {:else}
-           {#if hoveredUsername}
-             <div><strong>Placed by</strong> {hoveredUsername}</div>
+           <div><strong>Pixel</strong> {$hovered.x}, {$hovered.y}</div>
+           {#if $hovered.data?.timestamp === 0}
+              <div><strong>Placed by</strong> {$currentUser?.username || 'You'}</div>
+              <div>Just now</div>
+           {:else}
+              {#if hoveredUsername}
+                <div><strong>Placed by</strong> {hoveredUsername}</div>
+              {/if}
+              <div>{formatTimestamp($hovered.data?.timestamp)}</div>
            {/if}
-           <div>{formatTimestamp($hovered.data.timestamp)}</div>
         {/if}
+
       </div>
     {/key}
   {/if}
@@ -568,5 +579,29 @@
     white-space: nowrap;
     transform: translate(12px, 12px);
     z-index: 100;
+  }
+
+  .pipette-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+
+  .preview-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid rgba(0,0,0,0.2);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  .hex-code {
+    font-family: monospace;
+    font-weight: 600;
+  }
+
+  .coords {
+    opacity: 0.7;
   }
 </style>

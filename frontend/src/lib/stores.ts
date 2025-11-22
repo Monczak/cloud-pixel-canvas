@@ -4,6 +4,7 @@ export type Hover = {
   x: number;
   y: number;
   data?: any;
+  color: string;
   clientX: number;
   clientY: number;
 } | null;

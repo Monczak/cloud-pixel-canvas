@@ -8,6 +8,7 @@
     selectSlot, 
     updateFromColorPicker 
   } from "$lib/palette";
+  import { clickOutside } from "$lib/utils";
   
   import { currentUser, isAuthModalOpen } from "$lib/auth-stores";
   import { canvasApi, CanvasAPIError } from "$lib/api/canvas";
@@ -19,8 +20,18 @@
   let uploading = false;
   let uploadError = "";
 
+  let showColorPicker = false;
+
   function togglePipette() {
     pipetteMode.update(v => !v);
+  }
+  
+  function toggleColorPicker() {
+    showColorPicker = !showColorPicker;
+  }
+  
+  function closeColorPicker() {
+    showColorPicker = false;
   }
 
   function handleUploadClick() {
@@ -99,13 +110,31 @@
     <div class="divider"></div>
 
     <div class="tools-area">
-      <div class="tool-wrapper">
-        <ColorPicker
-          hex={$selectedColor}
-          onInput={event => updateFromColorPicker(event.hex!)}
-          label=""
-          isAlpha={false}
-        />
+      
+      <div class="relative-tool">
+        <button 
+          class="icon-btn tool-btn"
+          class:active-tool={showColorPicker}
+          on:click|stopPropagation={toggleColorPicker}
+          title="Color Picker"
+        >
+          🎨
+        </button>
+
+        {#if showColorPicker}
+          <div 
+            class="picker-popover glass-panel" 
+            use:clickOutside={closeColorPicker}
+          >
+            <ColorPicker
+              hex={$selectedColor}
+              onInput={event => updateFromColorPicker(event.hex!)}
+              label=""
+              isAlpha={false}
+              isDialog={false} 
+            />
+          </div>
+        {/if}
       </div>
 
       <button 
@@ -219,32 +248,32 @@
     gap: 8px;
   }
 
-  .tool-wrapper {
+  .relative-tool {
+    position: relative;
     display: flex;
-    justify-content: center;
     align-items: center;
-    --cp-bg-color: #ffffff;
-    --cp-text-color: #333333;
-    --cp-input-bg-color: #f3f4f6;
-    --cp-border-color: #d1d5db;
-    color: #333;
+    justify-content: center;
   }
 
-  /* Specific overrides for svelte-awesome-color-picker internals */
-  :global(.color-picker-wrapper) {
-    display: flex !important;
+  .picker-popover {
+    position: absolute;
+    bottom: calc(100% + 24px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px;
+    z-index: 1000;
+    
+    --cp-bg-color: transparent;
+    --cp-border-color: transparent;
+    --cp-input-color: #f3f4f6;
+    --cp-text-color: #333333;
+
+    color: #333333;
   }
-  
-  :global(.vacp-color-picker) {
-    background: white !important;
-    color: #333 !important;
-    font-family: inherit;
-  }
-  
-  :global(.vacp-color-input) {
-    color: #333 !important;
+
+  :global(.picker-popover input) {
+    color: #333333 !important;
     background: #f3f4f6 !important;
-    border: 1px solid #ccc !important;
   }
 
   .tool-btn {

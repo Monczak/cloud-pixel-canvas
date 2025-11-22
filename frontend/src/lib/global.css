@@ -11,6 +11,10 @@
   --color-danger: #dc2626;
 }
 
+button, input, select, textarea {
+  font-family: inherit;
+}
+
 .icon-btn {
   display: flex;
   align-items: center;

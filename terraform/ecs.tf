@@ -84,11 +84,11 @@ resource "aws_ecs_task_definition" "backend" {
         value = tostring(random_password.system_key.result)
       },
       {
-        name  = "REDIS_HOST"
+        name  = "VALKEY_HOST"
         value = tostring(aws_elasticache_replication_group.main.primary_endpoint_address)
       },
       {
-        name  = "REDIS_PORT"
+        name  = "VALKEY_PORT"
         value = tostring(aws_elasticache_replication_group.main.port)
       },
     ]

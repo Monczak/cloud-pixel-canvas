@@ -59,7 +59,7 @@ output "frontend_service_name" {
   value       = aws_ecs_service.frontend.name
 }
 
-output "redis_endpoint" {
-  description = "Redis primary endpoint"
+output "valkey_endpoint" {
+  description = "Valkey primary endpoint"
   value       = aws_elasticache_replication_group.main.primary_endpoint_address
 }

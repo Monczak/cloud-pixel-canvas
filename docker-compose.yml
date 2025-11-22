@@ -14,8 +14,8 @@ services:
       - MONGO_URI=mongodb://mongo:27017
       - MONGO_DB=pixel_canvas
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - VALKEY_HOST=valkey
+      - VALKEY_PORT=6379
     networks:
       - cloud-pixel-canvas-network
 
@@ -30,8 +30,8 @@ services:
     networks:
       - cloud-pixel-canvas-network
 
-  redis:
-    image: redis:alpine
+  valkey:
+    image: valkey/valkey:8-alpine
     ports:
       - 6379:6379
     networks:

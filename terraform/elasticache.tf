@@ -1,15 +1,15 @@
 resource "aws_elasticache_subnet_group" "main" {
-  name       = "${var.project_name}-redis-subnet-group"
+  name       = "${var.project_name}-valkey-subnet-group"
   subnet_ids = [aws_subnet.public_1.id, aws_subnet.public_2.id]
 
   tags = {
-    Name = "${var.project_name}-redis-subnet-group"
+    Name = "${var.project_name}-valkey-subnet-group"
   }
 }
 
-resource "aws_security_group" "redis" {
-  name        = "${var.project_name}-redis-sg"
-  description = "Redis Security Group"
+resource "aws_security_group" "valkey" {
+  name        = "${var.project_name}-valkey-sg"
+  description = "Valkey Security Group"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -17,7 +17,7 @@ resource "aws_security_group" "redis" {
     to_port         = 6379
     protocol        = "tcp"
     security_groups = [aws_security_group.ecs_tasks.id]
-    description     = "Allow Redis access from ECS tasks"
+    description     = "Allow Valkey access from ECS tasks"
   }
 
   egress {
@@ -29,24 +29,24 @@ resource "aws_security_group" "redis" {
   }
 
   tags = {
-    Name = "${var.project_name}-redis-sg"
+    Name = "${var.project_name}-valkey-sg"
   }
 }
 
 resource "aws_elasticache_replication_group" "main" {
-  replication_group_id       = "${var.project_name}-redis"
-  description                = "Pixel Canvas Redis"
+  replication_group_id       = "${var.project_name}-valkey"
+  description                = "Pixel Canvas Valkey"
   node_type                  = "cache.t3.micro"
   num_cache_clusters         = 1
   port                       = 6379
   subnet_group_name          = aws_elasticache_subnet_group.main.name
-  security_group_ids         = [aws_security_group.redis.id]
+  security_group_ids         = [aws_security_group.valkey.id]
   automatic_failover_enabled = false
 
-  engine         = "redis"
-  engine_version = 7.1
+  engine         = "valkey"
+  engine_version = 8.2
 
   tags = {
-    Name = "${var.project_name}-redis"
+    Name = "${var.project_name}-valkey"
   }
 }

@@ -21,9 +21,9 @@ class Config:
 
         self.local_storage_path: str = os.getenv("LOCAL_STORAGE_PATH", ".storage")
 
-        # Redis / ElastiCache
-        self.redis_host: str = os.getenv("REDIS_HOST", "localhost")
-        self.redis_port: int = int(os.getenv("REDIS_PORT", 6379))
+        # Valkey / ElastiCache
+        self.valkey_host: str = os.getenv("VALKEY_HOST", "localhost")
+        self.valkey_port: int = int(os.getenv("VALKEY_PORT", 6379))
 
         # AWS
         self.aws_region: str = os.getenv("AWS_REGION", "us-east-1")

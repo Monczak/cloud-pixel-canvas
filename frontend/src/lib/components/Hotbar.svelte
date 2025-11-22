@@ -65,8 +65,8 @@
   }
 </script>
 
-<div class="color-hotbar">
-  <div class="controls-container">
+<div class="hotbar-container">
+  <div class="glass-panel controls">
     <div class="palette-area">
       <div class="swatch-row">
         {#each fixedColors as c, i}
@@ -109,7 +109,7 @@
       </div>
 
       <button 
-        class="tool-button"
+        class="icon-btn tool-btn"
         class:active-tool={$pipetteMode}
         on:click={togglePipette}
         title="Pipette Tool"
@@ -118,7 +118,7 @@
       </button>
 
       <button
-        class="tool-button"
+        class="icon-btn tool-btn"
         on:click={handleUploadClick}
         disabled={uploading}
         title="Upload Image"
@@ -133,7 +133,7 @@
   </div>
   
   {#if uploadError}
-    <div class="upload-error">{uploadError}</div>
+    <div class="upload-error glass-panel">{uploadError}</div>
   {/if}
 </div>
 
@@ -146,27 +146,17 @@
 />
 
 <style>
-  .color-hotbar {
-    position: fixed;
-    left: 50%;
-    bottom: 16px;
-    transform: translateX(-50%);
-    z-index: 400;
+  .hotbar-container {
     display: flex;
     flex-direction: column;
     gap: 8px;
     align-items: center;
   }
 
-  .controls-container {
+  .controls {
     display: flex;
     gap: 12px;
     padding: 12px;
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(10px);
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.4);
     align-items: center;
   }
 
@@ -209,7 +199,7 @@
   }
 
   .swatch.active {
-    border: 2px solid black;
+    border: 2px solid var(--color-text);
     transform: scale(1.15);
     z-index: 2;
     box-shadow: 0 2px 6px rgba(0,0,0,0.2);
@@ -233,7 +223,6 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    /* Force readable colors for the library */
     --cp-bg-color: #ffffff;
     --cp-text-color: #333333;
     --cp-input-bg-color: #f3f4f6;
@@ -258,34 +247,23 @@
     border: 1px solid #ccc !important;
   }
 
-  .tool-button {
+  .tool-btn {
     width: 32px;
     height: 32px;
     border-radius: 8px;
     border: 1px solid rgba(0, 0, 0, 0.1);
     background: white;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-    color: #444;
+    font-size: 16px;
   }
 
-  .tool-button:hover:not(:disabled) {
+  .tool-btn:hover:not(:disabled) {
     background: #f0f0f0;
-    transform: translateY(-1px);
   }
 
-  .tool-button.active-tool {
-    background: #2563eb;
+  .tool-btn.active-tool {
+    background: var(--color-primary);
     color: white;
-    border-color: #2563eb;
-  }
-
-  .tool-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+    border-color: var(--color-primary);
   }
 
   .spinner {
@@ -299,11 +277,9 @@
 
   .upload-error {
     background: #fef2f2;
-    color: #dc2626;
+    color: var(--color-danger);
     padding: 8px 12px;
-    border-radius: 8px;
     font-size: 13px;
     border: 1px solid #fecaca;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
 </style>

@@ -9,42 +9,44 @@
   }));
 </script>
 
-<div class="status">
-  <div>
-    <div class="label">Cursor</div>
-    <div class="value">
+<div class="glass-panel status">
+  <div class="item">
+    <span class="label">Cursor</span>
+    <span class="value">
       {$current.x !== null ? `${$current.x}, ${$current.y}` : "-"}
-    </div>
+    </span>
   </div>
-  <div>
-    <div class="label">Zoom</div>
-    <div class="value">{$current.zoom.toFixed(2)}x</div>
+  <div class="item">
+    <span class="label">Zoom</span>
+    <span class="value">{$current.zoom.toFixed(2)}x</span>
   </div>
 </div>
 
 <style>
   .status {
-    position: fixed;
-    left: 12px;
-    bottom: 12px;
-    z-index: 300;
-    color: black;
-    background: rgba(255, 255, 255, 0.85);
-    padding: 8px 10px;
-    border-radius: 8px;
-    font-size: 13px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-    backdrop-filter: blur(6px);
+    padding: 8px 12px;
     display: flex;
-    gap: 12px;
+    gap: 16px;
     align-items: center;
-    min-width: 120px;
+    font-size: 13px;
+    min-width: 140px;
   }
+  
+  .item {
+    display: flex;
+    flex-direction: column;
+  }
+
   .label {
-    opacity: 0.85;
-    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    opacity: 0.6;
+    font-weight: 700;
+    letter-spacing: 0.5px;
   }
+  
   .value {
+    font-weight: 600;
     font-feature-settings: "tnum";
     font-variant-numeric: tabular-nums;
   }

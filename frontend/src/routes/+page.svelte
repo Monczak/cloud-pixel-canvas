@@ -12,9 +12,16 @@
   import { authApi } from "$lib/api/auth";
   import { currentUser } from "$lib/auth-stores";
 
-  let gallery: SnapshotGallery;
-  let loading = true;
+  let canvasComponent: Canvas;
   let canvasReady = false;
+  
+  let gallery: SnapshotGallery;
+  
+  let loading = true;
+
+  async function handleCanvasRefresh() {
+    await canvasComponent?.refresh();
+  }
 
   onMount(async () => {
     // Start minimum timer for aesthetic purposes
@@ -54,7 +61,6 @@
   }
 </script>
 
-<!-- Loading Overlay -->
 {#if loading}
   <div class="loading-screen" transition:fade={{ duration: 400 }}>
     <div class="loader-content">
@@ -63,21 +69,25 @@
   </div>
 {/if}
 
-<Canvas onloaded={() => canvasReady = true}>
-  <!-- UI Overlay Layer passed into Canvas slot -->
+<Canvas bind:this={canvasComponent} onloaded={() => canvasReady = true}>
   <div class="ui-layer">
     <div class="top-bar">
-      <div class="left-controls">
-        <Status />
-        <SnapshotButton on:click={openGallery} />
-      </div>
-      <div class="right-controls">
+      <div class="spacer"></div>
+      <div class="pointer-auto">
         <AuthWidget />
       </div>
     </div>
 
     <div class="bottom-bar">
-      <Hotbar />
+      <div class="left-slot pointer-auto">
+        <Status />
+      </div>
+      <div class="center-slot pointer-auto">
+        <Hotbar onCanvasUpdate={handleCanvasRefresh} />
+      </div>
+      <div class="right-slot pointer-auto">
+        <SnapshotButton on:click={openGallery} />
+      </div>
     </div>
   </div>
 </Canvas>
@@ -104,28 +114,36 @@
     padding: 16px;
   }
 
+  .pointer-auto {
+    pointer-events: auto;
+  }
+
   .top-bar {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
   }
 
-  .left-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    pointer-events: auto;
-  }
-
-  .right-controls {
-    pointer-events: auto;
-  }
-
   .bottom-bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: end;
+    width: 100%;
+  }
+
+  .left-slot {
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .center-slot {
     display: flex;
     justify-content: center;
-    padding-bottom: 16px;
-    pointer-events: auto;
+  }
+
+  .right-slot {
+    display: flex;
+    justify-content: flex-end;
   }
 
   .loading-screen {
@@ -148,10 +166,5 @@
     font-size: 14px;
     opacity: 0.7;
     font-weight: 500;
-  }
-
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
   }
 </style>

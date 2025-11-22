@@ -1,0 +1,47 @@
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.9);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.4);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --glass-blur: blur(12px);
+  --glass-radius: 12px;
+  
+  --color-text: #1a1a1a;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-danger: #dc2626;
+}
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s, background 0.15s;
+  background: transparent;
+  color: var(--color-text);
+  padding: 0;
+}
+
+.icon-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.icon-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--glass-radius);
+  color: var(--color-text);
+}

@@ -42,13 +42,12 @@
 
   onDestroy(() => {
     if (typeof window === "undefined") return;
-
     window.removeEventListener("click", handleClickOutside);
   });
 </script>
 
 <div class="auth-widget">
-  <button class="auth-button" on:click={handleWidgetClick}>
+  <button class="glass-panel auth-button icon-btn" on:click={handleWidgetClick}>
     {#if $currentUser}
       <span class="username">{$currentUser?.username}</span>
     {:else}
@@ -57,7 +56,7 @@
   </button>
 
   {#if showMenu && $currentUser}
-    <div class="menu">
+    <div class="glass-panel menu">
       <div class="menu-item user-info">
         <div class="username-display">{$currentUser.username}</div>
         <div class="email-display">{$currentUser.email}</div>
@@ -71,44 +70,34 @@
 
 <style>
   .auth-widget {
-    position: fixed;
-    top: 16px;
-    right: 16px;
+    position: relative;
     z-index: 500;
   }
 
   .auth-button {
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(6px);
-    border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
+    padding: 8px 16px;
     font-size: 14px;
     font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transition: all 0.2s;
-    color: black;
+    height: 40px;
   }
 
   .auth-button:hover {
     background: rgba(255, 255, 255, 1);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
   }
 
   .username {
-    color: #2563eb;
+    color: var(--color-primary);
   }
 
   .menu {
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    background: white; /* Override glass for menu readability */
     min-width: 200px;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .menu-item {
@@ -120,7 +109,7 @@
     cursor: pointer;
     font-size: 14px;
     transition: background 0.15s;
-    color: black;
+    color: var(--color-text);
   }
 
   .menu-item:hover {
@@ -138,7 +127,7 @@
 
   .username-display {
     font-weight: 600;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .email-display {
@@ -147,7 +136,7 @@
   }
 
   .logout-button {
-    color: #dc2626;
+    color: var(--color-danger);
     font-weight: 600;
   }
 </style>

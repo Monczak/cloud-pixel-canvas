@@ -200,6 +200,18 @@
   }
 
   async function handlePointerMove(e: PointerEvent) {
+    const target = e.target as HTMLElement;
+    const isCanvasHover = target === canvasEl || target === overlayEl || target === containerEl;
+
+    if (!isCanvasHover) {
+      if (storeGet(hovered) !== null) {
+        hovered.set(null);
+        hoveredUsername = null;
+        paintOverlay();
+      }
+      return;
+    }
+
     const logical = screenToLogical(e.clientX, e.clientY);
     const lx = Math.floor(logical.x);
     const ly = Math.floor(logical.y);
@@ -437,6 +449,8 @@
       window.removeEventListener("pointerup", handlePointerUp);
     }
   });
+
+  export const refresh = fetchCanvas;
 </script>
 
 <div bind:this={containerEl} class="container" class:pipette-cursor={$pipetteMode}>
@@ -449,7 +463,7 @@
 
   {#if $hovered && $hovered.data}
     {#key $hovered.clientX + "-" + $hovered.clientY}
-      <div class="tooltip" style="left: {$hovered.clientX}px; top: {$hovered.clientY}px">
+      <div class="glass-panel tooltip" style="left: {$hovered.clientX}px; top: {$hovered.clientY}px">
         <div><strong>Pixel</strong> {$hovered.x}, {$hovered.y}</div>
         {#if $hovered.data.timestamp === 0}
            <div><strong>Placed by</strong> {$currentUser?.username || 'You'}</div>
@@ -493,15 +507,10 @@
   .tooltip {
     position: fixed;
     pointer-events: none;
-    background: rgba(255, 255, 255, 0.85);
-    color: black;
     font-size: 13px;
     padding: 6px 8px;
-    border-radius: 8px;
     white-space: nowrap;
     transform: translate(12px, 12px);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-    backdrop-filter: blur(6px);
     z-index: 100;
   }
 </style>

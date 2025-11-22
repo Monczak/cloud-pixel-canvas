@@ -51,10 +51,15 @@ output "ecs_cluster_name" {
 
 output "backend_service_name" {
   description = "Backend service name"
-  value = aws_ecs_service.backend.name
+  value       = aws_ecs_service.backend.name
 }
 
 output "frontend_service_name" {
   description = "Frontend service name"
-  value = aws_ecs_service.frontend.name
+  value       = aws_ecs_service.frontend.name
+}
+
+output "redis_endpoint" {
+  description = "Redis primary endpoint"
+  value       = aws_elasticache_replication_group.main.primary_endpoint_address
 }

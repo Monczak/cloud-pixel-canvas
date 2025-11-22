@@ -1,11 +1,27 @@
-from typing import List
+from typing import Dict, List, Optional
 from fastapi import WebSocket
 import asyncio
 import json
 
+from adapters.pubsub import PubSubAdapter
+
 class ConnectionManager:
     def __init__(self):
         self.active: List[WebSocket] = []
+        self.pubsub: Optional[PubSubAdapter] = None
+        self.channel_name = "canvas_updates"
+        self._listener_task: Optional[asyncio.Task] = None
+
+    def init_pubsub(self, pubsub_adapter: PubSubAdapter):
+        self.pubsub = pubsub_adapter
+
+    async def start_listening(self):
+        if not self.pubsub:
+            raise RuntimeError("PubSub adapter not initialized")
+        
+        self._listener_task = asyncio.create_task(
+            self.pubsub.subscribe(self.channel_name, self._handle_broadcast)
+        )
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -17,7 +33,7 @@ class ConnectionManager:
         except ValueError:
             pass
 
-    async def broadcast(self, message: dict):
+    async def _handle_broadcast(self, message: Dict):
         data = json.dumps(message)
         to_remove = []
         for ws in list(self.active):
@@ -27,5 +43,22 @@ class ConnectionManager:
                 to_remove.append(ws)
         for ws in to_remove:
             self.disconnect(ws)
+
+    async def broadcast(self, message: Dict):
+        if self.pubsub:
+            await self.pubsub.publish(self.channel_name, message)
+        else:
+            print("PubSub not configured - update dropped")
+
+    async def shutdown(self):
+        if self._listener_task:
+            self._listener_task.cancel()
+            try:
+                await self._listener_task
+            except asyncio.CancelledError:
+                pass
+
+        if self.pubsub:
+            await self.pubsub.close()
 
 manager = ConnectionManager()

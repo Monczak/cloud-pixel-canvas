@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from adapters.db import DynamoDBAdapter, MongoDBAdapter
 from adapters.auth import CognitoAuthAdapter, LocalMongoAuthAdapter
 from adapters.storage import LocalFileStorageAdapter, S3StorageAdapter
+from adapters.pubsub import RedisPubSubAdapter
 from config import config
 from routes.auth import auth_router
 from routes.canvas import canvas_router
@@ -16,6 +17,10 @@ from deps import manager as dep_manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     session = aioboto3.Session()
+
+    pubsub_adapter = RedisPubSubAdapter(config.redis_host, config.redis_port)
+    ws_manager.init_pubsub(pubsub_adapter)
+    await ws_manager.start_listening()
 
     match config.environment:
         case "aws":
@@ -36,6 +41,7 @@ async def lifespan(app: FastAPI):
         case _:
             raise ValueError(f"Unknown environment: {config.environment}")        
 
+    await ws_manager.shutdown()
 
 app = FastAPI(title="Cloud Pixel Canvas API", lifespan=lifespan)
 

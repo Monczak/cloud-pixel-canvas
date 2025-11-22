@@ -80,8 +80,16 @@ resource "aws_ecs_task_definition" "backend" {
         value = "http://${aws_lb.main.dns_name}"
       },
       {
-        name  = "SYSTEM_KEY",
+        name  = "SYSTEM_KEY"
         value = tostring(random_password.system_key.result)
+      },
+      {
+        name  = "REDIS_HOST"
+        value = tostring(aws_elasticache_replication_group.main.primary_endpoint_address)
+      },
+      {
+        name  = "REDIS_PORT"
+        value = tostring(aws_elasticache_replication_group.main.port)
       },
     ]
 

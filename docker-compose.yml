@@ -14,6 +14,8 @@ services:
       - MONGO_URI=mongodb://mongo:27017
       - MONGO_DB=pixel_canvas
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     networks:
       - cloud-pixel-canvas-network
 
@@ -25,6 +27,13 @@ services:
       - mongo_data:/data/db
     environment:
       - MONGO_INITDB_DATABASE=pixel_canvas
+    networks:
+      - cloud-pixel-canvas-network
+
+  redis:
+    image: redis:alpine
+    ports:
+      - 6379:6379
     networks:
       - cloud-pixel-canvas-network
 

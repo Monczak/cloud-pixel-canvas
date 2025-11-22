@@ -91,6 +91,14 @@ resource "aws_ecs_task_definition" "backend" {
         name  = "VALKEY_PORT"
         value = tostring(aws_elasticache_replication_group.main.port)
       },
+      {
+        name  = "VALKEY_SSL"
+        value = "true"
+      },
+      {
+        name  = "VALKEY_PASSWORD"
+        value = aws_elasticache_replication_group.main.auth_token
+      },
     ]
 
     logConfiguration = {

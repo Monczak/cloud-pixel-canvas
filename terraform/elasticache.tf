@@ -33,6 +33,11 @@ resource "aws_security_group" "valkey" {
   }
 }
 
+resource "random_password" "valkey_auth" {
+  length  = 32
+  special = false
+}
+
 resource "aws_elasticache_replication_group" "main" {
   replication_group_id       = "${var.project_name}-valkey"
   description                = "Pixel Canvas Valkey"
@@ -41,10 +46,13 @@ resource "aws_elasticache_replication_group" "main" {
   port                       = 6379
   subnet_group_name          = aws_elasticache_subnet_group.main.name
   security_group_ids         = [aws_security_group.valkey.id]
-  automatic_failover_enabled = false
 
   engine         = "valkey"
   engine_version = 8.2
+
+  at_rest_encryption_enabled = true
+  transit_encryption_enabled = true
+  auth_token                 = random_password.valkey_auth.result
 
   tags = {
     Name = "${var.project_name}-valkey"

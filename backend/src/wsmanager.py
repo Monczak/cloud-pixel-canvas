@@ -19,9 +19,19 @@ class ConnectionManager:
         if not self.pubsub:
             raise RuntimeError("PubSub adapter not initialized")
         
-        self._listener_task = asyncio.create_task(
-            self.pubsub.subscribe(self.channel_name, self._handle_broadcast)
-        )
+        self._listener_task = asyncio.create_task(self._subscribe_loop())
+
+    async def _subscribe_loop(self):
+        while True:
+            try:
+                if self.pubsub:
+                    await self.pubsub.subscribe(self.channel_name, self._handle_broadcast)
+            except asyncio.CancelledError:
+                # Task cancelled during shutdown
+                break
+            except Exception as e:
+                print(f"PubSub subscription error: {e}. Retrying in 3s...")
+                await asyncio.sleep(3)
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -46,7 +56,10 @@ class ConnectionManager:
 
     async def broadcast(self, message: Dict):
         if self.pubsub:
-            await self.pubsub.publish(self.channel_name, message)
+            try:
+                await self.pubsub.publish(self.channel_name, message)
+            except Exception as e:
+                print(f"Failed to publish message: {e}")
         else:
             print("PubSub not configured - update dropped")
 

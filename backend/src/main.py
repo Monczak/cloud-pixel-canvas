@@ -18,7 +18,12 @@ from deps import manager as dep_manager
 async def lifespan(app: FastAPI):
     session = aioboto3.Session()
 
-    pubsub_adapter = ValkeyPubSubAdapter(config.valkey_host, config.valkey_port)
+    pubsub_adapter = ValkeyPubSubAdapter(
+        host=config.valkey_host, 
+        port=config.valkey_port,
+        ssl=config.valkey_ssl,
+        password=config.valkey_password
+    )
     ws_manager.init_pubsub(pubsub_adapter)
     await ws_manager.start_listening()
 

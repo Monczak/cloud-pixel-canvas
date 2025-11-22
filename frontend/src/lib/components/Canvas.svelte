@@ -16,6 +16,9 @@
   let canvasEl: HTMLCanvasElement;
   let overlayEl: HTMLCanvasElement;
 
+  let offscreenCanvas: HTMLCanvasElement;
+  let offscreenCtx: CanvasRenderingContext2D | null = null;
+
   let logicalWidth = 100;
   let logicalHeight = 100;
   let pixels: Record<string, PixelData> = {};
@@ -50,12 +53,42 @@
     }
   }
 
+  function initOffscreenCanvas() {
+    if (typeof document === "undefined") return;
+
+    if (!offscreenCanvas) {
+      offscreenCanvas = document.createElement("canvas");
+      offscreenCtx = offscreenCanvas.getContext("2d", { alpha: false });
+    }
+
+    if (offscreenCanvas.width !== logicalWidth || offscreenCanvas.height !== logicalHeight) {
+      offscreenCanvas.width = logicalWidth;
+      offscreenCanvas.height = logicalHeight;
+    }
+    
+    redrawOffscreen();
+  }
+
+  function redrawOffscreen() {
+    if (!offscreenCtx) return;
+    
+    offscreenCtx.fillStyle = canvasBackgroundColor;
+    offscreenCtx.fillRect(0, 0, logicalWidth, logicalHeight);
+
+    for (const p of Object.values(pixels)) {
+      offscreenCtx.fillStyle = p.color;
+      offscreenCtx.fillRect(p.x, p.y, 1, 1);
+    }
+  }
+
   async function fetchCanvas() {
     try {
       const canvasState = await canvasApi.getCanvas();
       logicalWidth = canvasState.canvas_width;
       logicalHeight = canvasState.canvas_height;
       pixels = canvasState.pixels ?? {};
+
+      initOffscreenCanvas();
 
       draw();
       autoCenterAndFit();
@@ -119,16 +152,6 @@
     view.set({ scale, tx, ty });
   }
 
-  function drawBase(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = canvasBackgroundColor;
-    ctx.fillRect(0, 0, logicalWidth, logicalHeight);
-
-    for (const p of Object.values(pixels)) {
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x, p.y, 1, 1);
-    }
-  }
-
   function draw() {
     resizeCanvases();
     const ctx = canvasEl?.getContext("2d");
@@ -141,7 +164,13 @@
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, tx * dpr, ty * dpr);
     ctx.imageSmoothingEnabled = false;
 
-    drawBase(ctx);
+    if (offscreenCanvas) {
+      ctx.drawImage(offscreenCanvas, 0, 0);
+    } else {
+      ctx.fillStyle = canvasBackgroundColor;
+      ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+    }
+
     paintOverlay();
   }
 
@@ -338,6 +367,7 @@
     const key = `${lx}_${ly}`;
     const previousPixel = pixels[key]; 
 
+    // Optimistic update
     pixels[key] = {
       x: lx,
       y: ly,
@@ -345,17 +375,33 @@
       userId: user.user_id,
       timestamp: 0
     };
+
+    // Update buffer immediately
+    if (offscreenCtx) {
+      offscreenCtx.fillStyle = color;
+      offscreenCtx.fillRect(lx, ly, 1, 1);
+    }
     draw();
 
     try {
       const pixelData = await canvasApi.placePixel(lx, ly, color);
       pixels[key] = pixelData;
-      draw();
+      // No need to redraw here, color is likely the same
     } catch (err) {
+      // Revert if failed
       if (previousPixel) {
         pixels[key] = previousPixel;
+        if (offscreenCtx) {
+          offscreenCtx.fillStyle = previousPixel.color;
+          offscreenCtx.fillRect(previousPixel.x, previousPixel.y, 1, 1);
+        }
       } else {
         delete pixels[key];
+        if (offscreenCtx) {
+          // Revert to background color
+          offscreenCtx.fillStyle = canvasBackgroundColor;
+          offscreenCtx.fillRect(lx, ly, 1, 1);
+        }
       }
       draw();
       
@@ -374,22 +420,32 @@
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
+          
           if (msg.intent === "pixel") {
             const p = msg.payload as PixelData;
             pixels[`${p.x}_${p.y}`] = p;
+            
+            if (offscreenCtx) {
+              offscreenCtx.fillStyle = p.color;
+              offscreenCtx.fillRect(p.x, p.y, 1, 1);
+            }
             draw();
+
           } else if (msg.intent === "bulk_update") {
             const bulkPixels = msg.payload.pixels;
             for (const [key, pixelData] of Object.entries(bulkPixels)) {
               pixels[key] = pixelData as PixelData;
             }
+            redrawOffscreen();
             draw();
+
           } else if (msg.intent === "bulk_overwrite") {
             const bulkPixels = msg.payload.pixels;
             pixels = {};
             for (const [key, pixelData] of Object.entries(bulkPixels)) {
               pixels[key] = pixelData as PixelData;
             }
+            redrawOffscreen();
             draw();
           } 
         } catch (err) {

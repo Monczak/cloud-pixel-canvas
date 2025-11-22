@@ -292,6 +292,11 @@
     border-color: var(--color-primary);
   }
 
+  .tool-btn.active-tool:hover {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+  }
+
   .spinner {
     animation: spin 1s linear infinite;
   }

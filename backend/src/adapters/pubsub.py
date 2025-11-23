@@ -18,14 +18,13 @@ class PubSubAdapter(ABC):
         pass
 
 class ValkeyPubSubAdapter(PubSubAdapter):
-    def __init__(self, host: str, port: int, ssl: bool = False, password: str | None = None) -> None:
+    def __init__(self, host: str, port: int, ssl: bool = False) -> None:
         self.valkey = Valkey(
             host=host, 
             port=port, 
             ssl=ssl,
-            password=password,
             decode_responses=True,
-            health_check_interval=30
+            socket_keepalive=True,
         )
         self.pubsub = None
         self._is_active = True
@@ -53,7 +52,10 @@ class ValkeyPubSubAdapter(PubSubAdapter):
                         print(f"Error processing pubsub message: {e}")
         except Exception as e:
             print(f"Valkey subscription loop ended: {e}")
-            raise e 
+            raise e
+        finally:
+            if self.pubsub:
+                await self.pubsub.close()
     
     async def close(self) -> None:
         self._is_active = False

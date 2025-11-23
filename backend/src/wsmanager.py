@@ -26,6 +26,9 @@ class ConnectionManager:
             try:
                 if self.pubsub:
                     await self.pubsub.subscribe(self.channel_name, self._handle_broadcast)
+                
+                print(f"PubSub connection closed. Retrying in 3s...")
+                await asyncio.sleep(3)
             except asyncio.CancelledError:
                 # Task cancelled during shutdown
                 break

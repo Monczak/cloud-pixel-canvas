@@ -85,19 +85,15 @@ resource "aws_ecs_task_definition" "backend" {
       },
       {
         name  = "VALKEY_HOST"
-        value = tostring(aws_elasticache_replication_group.main.primary_endpoint_address)
+        value = tostring(aws_elasticache_serverless_cache.main.endpoint[0].address)
       },
       {
         name  = "VALKEY_PORT"
-        value = tostring(aws_elasticache_replication_group.main.port)
+        value = tostring(aws_elasticache_serverless_cache.main.endpoint[0].port)
       },
       {
         name  = "VALKEY_SSL"
         value = "true"
-      },
-      {
-        name  = "VALKEY_PASSWORD"
-        value = aws_elasticache_replication_group.main.auth_token
       },
     ]
 

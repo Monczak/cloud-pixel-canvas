@@ -25,7 +25,6 @@ class Config:
         self.valkey_host: str = os.getenv("VALKEY_HOST", "localhost")
         self.valkey_port: int = int(os.getenv("VALKEY_PORT", 6379))
         self.valkey_ssl: bool = os.getenv("VALKEY_SSL", "false").lower() == "true"
-        self.valkey_password: str = os.getenv("VALKEY_PASSWORD", "")
 
         # AWS
         self.aws_region: str = os.getenv("AWS_REGION", "us-east-1")

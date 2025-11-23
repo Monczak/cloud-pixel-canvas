@@ -22,7 +22,6 @@ async def lifespan(app: FastAPI):
         host=config.valkey_host, 
         port=config.valkey_port,
         ssl=config.valkey_ssl,
-        password=config.valkey_password
     )
     ws_manager.init_pubsub(pubsub_adapter)
     await ws_manager.start_listening()

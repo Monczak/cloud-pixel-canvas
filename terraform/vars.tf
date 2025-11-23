@@ -33,6 +33,12 @@ variable "max_snapshots" {
   default     = 50
 }
 
+variable "heartbeat_interval" {
+  description = "Heartbeat interval in seconds"
+  type        = number
+  default     = 20
+}
+
 variable "snapshot_schedule_expression" {
   description = "CloudWatch Events schedule expression for snapshots"
   type        = string

@@ -35,7 +35,7 @@ resource "aws_security_group" "valkey" {
 
 resource "aws_elasticache_serverless_cache" "main" {
   engine = "valkey"
-  name   = "${var.project_name}-serverless-cache"
+  name   = "${var.project_name}-valkey"
 
   cache_usage_limits {
     data_storage {

@@ -21,6 +21,8 @@ class Config:
 
         self.local_storage_path: str = os.getenv("LOCAL_STORAGE_PATH", ".storage")
 
+        self.heartbeat_interval: int = int(os.getenv("HEARTBEAT_INTERVAL", 5))
+
         # Valkey / ElastiCache
         self.valkey_host: str = os.getenv("VALKEY_HOST", "localhost")
         self.valkey_port: int = int(os.getenv("VALKEY_PORT", 6379))

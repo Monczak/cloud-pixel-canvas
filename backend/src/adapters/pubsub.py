@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
+import asyncio
 import json
+import socket
 from typing import Awaitable, Callable, Dict
 
 from valkey.asyncio import Valkey
+from valkey.exceptions import ValkeyError, TimeoutError
 
 class PubSubAdapter(ABC):
     @abstractmethod
@@ -19,51 +22,59 @@ class PubSubAdapter(ABC):
 
 class ValkeyPubSubAdapter(PubSubAdapter):
     def __init__(self, host: str, port: int, ssl: bool = False) -> None:
-        self.valkey = Valkey(
+        self.pub_client = Valkey(
             host=host, 
             port=port, 
             ssl=ssl,
             decode_responses=True,
-            socket_keepalive=True,
         )
+
+        self.sub_client = Valkey(
+            host=host, 
+            port=port, 
+            ssl=ssl,
+            decode_responses=True,
+            health_check_interval=0,
+            
+            socket_timeout=None,
+            
+            socket_keepalive=True,
+            socket_keepalive_options={
+                socket.TCP_KEEPIDLE: 15,
+                socket.TCP_KEEPINTVL: 5,
+                socket.TCP_KEEPCNT: 3,
+            }
+        )
+
         self.pubsub = None
         self._is_active = True
 
     async def publish(self, channel: str, message: Dict) -> None:
-        await self.valkey.publish(channel, json.dumps(message))
+        await self.pub_client.publish(channel, json.dumps(message))
 
     async def subscribe(self, channel: str, callback: Callable[[Dict], Awaitable[None]]) -> None:
-        self._is_active = True
-        self.pubsub = self.valkey.pubsub()
-        
-        # This might raise ConnectionError if Valkey isn't ready
+        self.pubsub = self.sub_client.pubsub()
         await self.pubsub.subscribe(channel)
 
         try:
             async for message in self.pubsub.listen():
-                if not self._is_active:
-                    break
-
                 if message["type"] == "message":
                     try:
                         payload = json.loads(message["data"])
-                        await callback(payload)
+                        if payload.get("intent") != "heartbeat":
+                            await callback(payload)
                     except Exception as e:
-                        print(f"Error processing pubsub message: {e}")
+                        print(f"Error processing message: {e}")
+                        
         except Exception as e:
-            print(f"Valkey subscription loop ended: {e}")
+            print(f"Subscription connection lost: {e}")
             raise e
         finally:
             if self.pubsub:
                 await self.pubsub.close()
-    
-    async def close(self) -> None:
-        self._is_active = False
-        if self.pubsub:
-            try:
-                await self.pubsub.unsubscribe()
-                await self.pubsub.close()
-            except Exception:
-                pass
-        await self.valkey.aclose()
 
+    async def close(self) -> None:
+        if self.pubsub:
+            await self.pubsub.close()
+        await self.pub_client.aclose()
+        await self.sub_client.aclose()

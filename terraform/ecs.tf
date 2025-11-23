@@ -95,6 +95,10 @@ resource "aws_ecs_task_definition" "backend" {
         name  = "VALKEY_SSL"
         value = "true"
       },
+      {
+        name  = "HEARTBEAT_INTERVAL"
+        value = tostring(var.heartbeat_interval)
+      },
     ]
 
     logConfiguration = {

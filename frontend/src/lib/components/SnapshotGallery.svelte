@@ -9,11 +9,17 @@
   let loading = $state(false);
   let error = $state("");
 
+  let lastFetchTime = 0;
+
+  const cacheDuration = 60 * 1000; // 1 minute
   const perPage = 12;
 
   export function open() {
     isOpen = true;
-    if (snapshots.length === 0) {
+    const now = Date.now();
+
+    if (snapshots.length === 0 || now - lastFetchTime > cacheDuration) {
+      currentPage = 0;
       loadSnapshots(0);
     }
   }
@@ -31,6 +37,10 @@
       snapshots = response.snapshots;
       total = response.total;
       currentPage = page;
+
+      if (page === 0) {
+        lastFetchTime = Date.now();
+      }
     } catch (err) {
       error = "Failed to load snapshots";
       console.error(err);

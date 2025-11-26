@@ -9,6 +9,7 @@
     updateFromColorPicker 
   } from "$lib/palette";
   import { clickOutside } from "$lib/utils";
+  import { PaletteSolid, EyeDropperSolid, UploadSolid, Hourglass1Solid } from 'svelte-awesome-icons';
   
   import { currentUser, isAuthModalOpen } from "$lib/auth-stores";
   import { canvasApi, CanvasAPIError } from "$lib/api/canvas";
@@ -118,7 +119,7 @@
           on:click={toggleColorPicker}
           title="Color Picker"
         >
-          🎨
+          <PaletteSolid size=16/>
         </button>
 
         {#if showColorPicker}
@@ -140,7 +141,7 @@
         on:click={togglePipette}
         title="Pipette Tool"
       >
-        🧪
+        <EyeDropperSolid size=16/>
       </button>
 
       <button
@@ -150,9 +151,9 @@
         title="Upload Image"
       >
         {#if uploading}
-          <span class="spinner">⏳</span>
+          <span class="spinner"><Hourglass1Solid size=16/></span>
         {:else}
-          <span>📤</span>
+          <UploadSolid size=16/>
         {/if}
       </button>
     </div>

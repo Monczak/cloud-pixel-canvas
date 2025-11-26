@@ -1,5 +1,6 @@
 <script lang="ts">
   import SnapshotGallery from "./SnapshotGallery.svelte";
+  import { CameraSolid } from "svelte-awesome-icons";
 
   let gallery: SnapshotGallery;
 
@@ -9,7 +10,7 @@
 </script>
 
 <button class="glass-panel icon-btn snapshot-button" on:click={openGallery} title="Open Snapshots">
-  <span class="icon">📷</span>
+  <CameraSolid/>
 </button>
 
 <SnapshotGallery bind:this={gallery} />

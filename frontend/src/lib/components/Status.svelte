@@ -5,7 +5,7 @@
   const current = derived([hovered, view], ([$hovered, $view]) => ({
     x: $hovered?.x ?? null,
     y: $hovered?.y ?? null,
-    zoom: $view.scale
+    zoom: $view.scale,
   }));
 </script>
 
@@ -31,7 +31,7 @@
     font-size: 13px;
     min-width: 140px;
   }
-  
+
   .item {
     display: flex;
     flex-direction: column;
@@ -44,7 +44,7 @@
     font-weight: 700;
     letter-spacing: 0.5px;
   }
-  
+
   .value {
     font-weight: 600;
     font-feature-settings: "tnum";

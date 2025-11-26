@@ -1,21 +1,25 @@
 <script lang="ts">
   import Modal from "./Modal.svelte";
-  import { isAuthModalOpen, authModalMode, currentUser, pendingVerificationEmail } from "$lib/auth-stores";
+  import {
+    isAuthModalOpen,
+    authModalMode,
+    currentUser,
+    pendingVerificationEmail,
+  } from "$lib/auth-stores";
   import { authApi, AuthAPIError } from "$lib/api/auth";
 
-  let email = "";
-  let username = "";
-  let password = "";
-  let confirmPassword = "";
-  let verificationCode = "";
-  
-  let error = "";
-  let loading = false;
+  let email = $state("");
+  let username = $state("");
+  let password = $state("");
+  let confirmPassword = $state("");
+  let verificationCode = $state("");
+
+  let error = $state("");
+  let loading = $state(false);
 
   function closeModal() {
     isAuthModalOpen.set(false);
     error = "";
-
     email = "";
     username = "";
     password = "";
@@ -31,7 +35,6 @@
 
     loading = true;
     error = "";
-
     try {
       const res = await authApi.login(email, password);
       currentUser.set(res.user);
@@ -79,7 +82,6 @@
 
     loading = true;
     error = "";
-
     try {
       await authApi.register(email, username, password);
       pendingVerificationEmail.set(email);
@@ -103,10 +105,8 @@
 
     loading = true;
     error = "";
-
     try {
       await authApi.verify($pendingVerificationEmail, verificationCode);
-
       switchToLogin();
       email = $pendingVerificationEmail;
     } catch (err) {
@@ -135,16 +135,20 @@
     error = "";
   }
 
-  $: modalTitle = $authModalMode === "login" ? "Log In" : 
-                  $authModalMode === "register" ? "Register" : 
-                  "Verify Email";
+  let modalTitle = $derived(
+    $authModalMode === "login"
+      ? "Log In"
+      : $authModalMode === "register"
+        ? "Register"
+        : "Verify Email"
+  );
 </script>
 
 <Modal isOpen={$isAuthModalOpen} onClose={closeModal} title={modalTitle}>
   {#if $authModalMode === "login"}
     <form
       novalidate
-      on:submit={(e) => {
+      onsubmit={(e) => {
         e.preventDefault();
         handleLogin();
       }}
@@ -181,7 +185,7 @@
 
       <div class="switch-mode">
         Don't have an account?
-        <button type="button" class="link-button" on:click={switchToRegister}>
+        <button type="button" class="link-button" onclick={switchToRegister}>
           Register
         </button>
       </div>
@@ -189,7 +193,7 @@
   {:else if $authModalMode === "register"}
     <form
       novalidate
-      on:submit={(e) => {
+      onsubmit={(e) => {
         e.preventDefault();
         handleRegister();
       }}
@@ -226,7 +230,7 @@
           disabled={loading}
         />
         <div class="help-text">
-          Password must have at least 8 characters in total<br>
+          Password must have at least 8 characters in total<br />
           At least 1 lowercase, 1 uppercase, 1 number
         </div>
       </div>
@@ -252,19 +256,20 @@
 
       <div class="switch-mode">
         Already have an account?
-        <button type="button" class="link-button" on:click={switchToLogin}>
+        <button type="button" class="link-button" onclick={switchToLogin}>
           Log In
         </button>
       </div>
     </form>
   {:else if $authModalMode === "verify"}
     <p class="verify-info">
-      We've sent a verification code to <strong>{$pendingVerificationEmail}</strong>.
-      Enter it below to complete registration.
+      We've sent a verification code to <strong
+        >{$pendingVerificationEmail}</strong
+      >. Enter it below to complete registration.
     </p>
     <form
       novalidate
-      on:submit={(e) => {
+      onsubmit={(e) => {
         e.preventDefault();
         handleVerify();
       }}
@@ -289,7 +294,7 @@
       </button>
 
       <div class="switch-mode">
-        <button type="button" class="link-button" on:click={switchToLogin}>
+        <button type="button" class="link-button" onclick={switchToLogin}>
           Back to Login
         </button>
       </div>
@@ -301,14 +306,12 @@
   .form-group {
     margin-bottom: 20px;
   }
-
   label {
     display: block;
     margin-bottom: 8px;
     font-weight: 600;
     font-size: 14px;
   }
-
   input {
     width: 100%;
     padding: 10px 12px;
@@ -318,23 +321,19 @@
     transition: border-color 0.15s;
     box-sizing: border-box;
   }
-
   input:focus {
     outline: none;
     border-color: #2563eb;
   }
-
   input:disabled {
     background: rgba(0, 0, 0, 0.05);
     cursor: not-allowed;
   }
-
   .help-text {
     font-size: 12px;
-    color: rgba(0,0,0,0.5);
+    color: rgba(0, 0, 0, 0.5);
     margin-top: 4px;
   }
-
   .submit-button {
     width: 100%;
     padding: 12px;
@@ -347,16 +346,13 @@
     cursor: pointer;
     transition: background 0.15s;
   }
-
   .submit-button:hover:not(:disabled) {
     background: #1d4ed8;
   }
-
   .submit-button:disabled {
     background: rgba(0, 0, 0, 0.2);
     cursor: not-allowed;
   }
-
   .error {
     background: #fef2f2;
     color: #dc2626;
@@ -366,14 +362,12 @@
     font-size: 14px;
     border: 1px solid #fecaca;
   }
-
   .switch-mode {
     text-align: center;
     margin-top: 16px;
     font-size: 14px;
     color: rgba(0, 0, 0, 0.7);
   }
-
   .link-button {
     background: none;
     border: none;
@@ -383,11 +377,9 @@
     padding: 0;
     text-decoration: underline;
   }
-
   .link-button:hover {
     color: #1d4ed8;
   }
-
   .verify-info {
     margin-bottom: 24px;
     font-size: 14px;

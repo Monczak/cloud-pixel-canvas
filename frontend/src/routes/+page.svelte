@@ -8,53 +8,33 @@
   import SnapshotButton from "$lib/components/SnapshotButton.svelte";
   import AuthModal from "$lib/components/AuthModal.svelte";
   import Status from "$lib/components/Status.svelte";
-  
+
   import { authApi } from "$lib/api/auth";
   import { currentUser } from "$lib/auth-stores";
 
   let canvasComponent: Canvas;
-  let canvasReady = false;
-  
+  let canvasReady = $state(false);
+
   let gallery: SnapshotGallery;
-  
-  let loading = true;
+
+  let minTimerDone = $state(false);
+  let loading = $derived(!(minTimerDone && canvasReady));
 
   async function handleCanvasRefresh() {
     await canvasComponent?.refresh();
   }
 
-  onMount(async () => {
-    // Start minimum timer for aesthetic purposes
-    const minLoadTime = new Promise(resolve => setTimeout(resolve, 800));
-
-    try {
-      const user = await authApi.getCurrentUser();
-      currentUser.set(user);
-    } catch (e) {
-      console.log("Not logged in");
-    }
-
-    await minLoadTime;
-    
-    if (canvasReady) {
-        loading = false;
-    }
-  });
-  
-  let minTimerDone = false;
-
   onMount(() => {
-      setTimeout(() => {
-          minTimerDone = true;
-          if (canvasReady) loading = false;
-      }, 800);
+    // Start minimum timer for aesthetic purposes
+    setTimeout(() => {
+      minTimerDone = true;
+    }, 800);
 
-      authApi.getCurrentUser().then(u => currentUser.set(u)).catch(() => {});
+    authApi
+      .getCurrentUser()
+      .then((u) => currentUser.set(u))
+      .catch(() => console.log("Not logged in"));
   });
-
-  $: if (minTimerDone && canvasReady) {
-      loading = false;
-  }
 
   function openGallery() {
     gallery.open();
@@ -69,7 +49,7 @@
   </div>
 {/if}
 
-<Canvas bind:this={canvasComponent} onloaded={() => canvasReady = true}>
+<Canvas bind:this={canvasComponent} onloaded={() => (canvasReady = true)}>
   <div class="ui-layer">
     <div class="top-bar">
       <div class="spacer"></div>
@@ -103,49 +83,41 @@
     color: white;
     overflow: hidden;
   }
-
   .ui-layer {
     position: absolute;
     inset: 0;
-    pointer-events: none; 
+    pointer-events: none;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     padding: 16px;
   }
-
   .pointer-auto {
     pointer-events: auto;
   }
-
   .top-bar {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
   }
-
   .bottom-bar {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: end;
     width: 100%;
   }
-
   .left-slot {
     display: flex;
     justify-content: flex-start;
   }
-
   .center-slot {
     display: flex;
     justify-content: center;
   }
-
   .right-slot {
     display: flex;
     justify-content: flex-end;
   }
-
   .loading-screen {
     position: fixed;
     inset: 0;
@@ -156,11 +128,9 @@
     justify-content: center;
     color: white;
   }
-
   .loader-content {
     text-align: center;
   }
-
   .loader-content p {
     margin-top: 16px;
     font-size: 14px;

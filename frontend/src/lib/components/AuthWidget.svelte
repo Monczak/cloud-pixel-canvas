@@ -1,9 +1,9 @@
 <script lang="ts">
   import { currentUser, isAuthModalOpen } from "$lib/auth-stores";
   import { authApi } from "$lib/api/auth";
-  import { onDestroy, onMount } from "svelte";
+  import { onMount } from "svelte";
 
-  let showMenu = false;
+  let showMenu = $state(false);
 
   async function fetchCurrentUser() {
     const user = await authApi.getCurrentUser();
@@ -35,19 +35,17 @@
     }
   }
 
-  onMount(async () => {
-    await fetchCurrentUser();
+  onMount(() => {
+    fetchCurrentUser();
     window.addEventListener("click", handleClickOutside);
-  });
-
-  onDestroy(() => {
-    if (typeof window === "undefined") return;
-    window.removeEventListener("click", handleClickOutside);
+    return () => {
+      window.removeEventListener("click", handleClickOutside);
+    };
   });
 </script>
 
 <div class="auth-widget">
-  <button class="glass-panel auth-button icon-btn" on:click={handleWidgetClick}>
+  <button class="glass-panel auth-button icon-btn" onclick={handleWidgetClick}>
     {#if $currentUser}
       <span class="username">{$currentUser?.username}</span>
     {:else}
@@ -61,7 +59,7 @@
         <div class="username-display">{$currentUser.username}</div>
         <div class="email-display">{$currentUser.email}</div>
       </div>
-      <button class="menu-item logout-button" on:click={handleLogout}>
+      <button class="menu-item logout-button" onclick={handleLogout}>
         Log Out
       </button>
     </div>
@@ -73,33 +71,28 @@
     position: relative;
     z-index: 500;
   }
-
   .auth-button {
     padding: 8px 16px;
     font-size: 14px;
     font-weight: 600;
     height: 40px;
   }
-
   .auth-button:hover {
     background: rgba(255, 255, 255, 1);
   }
-
   .username {
     color: var(--color-primary);
   }
-
   .menu {
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
-    background: white; /* Override glass for menu readability */
+    background: white;
     min-width: 200px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
   }
-
   .menu-item {
     padding: 12px 16px;
     border: none;
@@ -111,30 +104,24 @@
     transition: background 0.15s;
     color: var(--color-text);
   }
-
   .menu-item:hover {
     background: rgba(0, 0, 0, 0.05);
   }
-
   .user-info {
     cursor: default;
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   }
-
   .user-info:hover {
     background: none;
   }
-
   .username-display {
     font-weight: 600;
     margin-bottom: 2px;
   }
-
   .email-display {
     font-size: 12px;
     opacity: 0.7;
   }
-
   .logout-button {
     color: var(--color-danger);
     font-weight: 600;

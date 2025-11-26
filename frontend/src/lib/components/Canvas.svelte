@@ -1,14 +1,15 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import type { Snippet } from "svelte";
   import { hovered, view, pipetteMode } from "$lib/stores";
   import { selectedColor, handlePipettePick } from "$lib/palette";
   import { get as storeGet } from "svelte/store";
-  
   import { canvasApi, CanvasAPIError, type PixelData } from "$lib/api/canvas";
   import { authApi } from "$lib/api/auth";
   import { currentUser, isAuthModalOpen } from "$lib/auth-stores";
 
-  export let onloaded: (() => void) | undefined = undefined;
+  let { onloaded, children }: { onloaded?: () => void; children?: Snippet } =
+    $props();
 
   const panThreshold = 10;
 
@@ -19,19 +20,17 @@
   let offscreenCanvas: HTMLCanvasElement;
   let offscreenCtx: CanvasRenderingContext2D | null = null;
 
-  let logicalWidth = 100;
-  let logicalHeight = 100;
-  let pixels: Record<string, PixelData> = {};
-
-  let scale = 1;
-  let tx = 0;
-  let ty = 0;
+  let logicalWidth = $state(100);
+  let logicalHeight = $state(100);
+  let pixels: Record<string, PixelData> = $state({});
+  let scale = $state(1);
+  let tx = $state(0);
+  let ty = $state(0);
 
   let dragging = false;
   let dragStart = { x: 0, y: 0 };
   let txStart = 0;
   let tyStart = 0;
-
   let hasPanned = false;
   let initialTx = 0;
   let initialTy = 0;
@@ -39,7 +38,7 @@
   let addedWindowListeners = false;
   let ws: WebSocket | null = null;
 
-  let hoveredUsername: string | null = null;
+  let hoveredUsername: string | null = $state(null);
 
   const canvasBackgroundColor = "#ffffff";
   const voidBackgroundColor = "#181a1c";
@@ -55,26 +54,27 @@
 
   function initOffscreenCanvas() {
     if (typeof document === "undefined") return;
-
     if (!offscreenCanvas) {
       offscreenCanvas = document.createElement("canvas");
       offscreenCtx = offscreenCanvas.getContext("2d", { alpha: false });
     }
 
-    if (offscreenCanvas.width !== logicalWidth || offscreenCanvas.height !== logicalHeight) {
+    if (
+      offscreenCanvas.width !== logicalWidth ||
+      offscreenCanvas.height !== logicalHeight
+    ) {
       offscreenCanvas.width = logicalWidth;
       offscreenCanvas.height = logicalHeight;
     }
-    
+
     redrawOffscreen();
   }
 
   function redrawOffscreen() {
     if (!offscreenCtx) return;
-    
+
     offscreenCtx.fillStyle = canvasBackgroundColor;
     offscreenCtx.fillRect(0, 0, logicalWidth, logicalHeight);
-
     for (const p of Object.values(pixels)) {
       offscreenCtx.fillStyle = p.color;
       offscreenCtx.fillRect(p.x, p.y, 1, 1);
@@ -92,7 +92,7 @@
 
       draw();
       autoCenterAndFit();
-      
+
       onloaded?.();
     } catch (err) {
       console.error("Canvas fetch error:", err);
@@ -105,7 +105,6 @@
 
     const cssW = Math.max(1, containerEl.clientWidth);
     const cssH = Math.max(1, containerEl.clientHeight);
-
     for (const el of [canvasEl, overlayEl]) {
       el.width = Math.round(cssW * dpr);
       el.height = Math.round(cssH * dpr);
@@ -121,7 +120,7 @@
     const longer = Math.max(cssW, cssH);
     return {
       min: 1,
-      max: Math.max(1, Math.floor(longer * 0.1))
+      max: Math.max(1, Math.floor(longer * 0.1)),
     };
   }
 
@@ -139,16 +138,11 @@
 
     const slack = 30;
     const limit = (world: number, css: number) =>
-      world >= css
-        ? [css - world, 0]
-        : [0, css - world];
-
+      world >= css ? [css - world, 0] : [0, css - world];
     const [minTx, maxTx] = limit(worldW, cssW);
     const [minTy, maxTy] = limit(worldH, cssH);
-
     tx = Math.min(maxTx + slack, Math.max(minTx - slack, tx));
     ty = Math.min(maxTy + slack, Math.max(minTy - slack, ty));
-
     view.set({ scale, tx, ty });
   }
 
@@ -160,10 +154,8 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = voidBackgroundColor;
     ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
-
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, tx * dpr, ty * dpr);
     ctx.imageSmoothingEnabled = false;
-
     if (offscreenCanvas) {
       ctx.drawImage(offscreenCanvas, 0, 0);
     } else {
@@ -177,13 +169,11 @@
   function paintOverlay() {
     const ctx = overlayEl?.getContext("2d");
     if (!ctx) return;
-
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, overlayEl.width, overlayEl.height);
 
     const hov = storeGet(hovered);
     if (!hov) return;
-
     const sx = hov.x * scale + tx;
     const sy = hov.y * scale + ty;
     const sw = Math.max(1, scale);
@@ -209,15 +199,16 @@
       x: (cssX - tx) / scale,
       y: (cssY - ty) / scale,
       cssX,
-      cssY
+      cssY,
     };
   }
 
   function handlePointerDown(e: PointerEvent) {
     const target = e.target as HTMLElement;
-    const isCanvasClick = target === canvasEl || target === overlayEl || target === containerEl;
+    const isCanvasClick =
+      target === canvasEl || target === overlayEl || target === containerEl;
     if (!isCanvasClick) {
-      return; 
+      return;
     }
 
     containerEl.setPointerCapture?.(e.pointerId);
@@ -230,8 +221,8 @@
 
   async function handlePointerMove(e: PointerEvent) {
     const target = e.target as HTMLElement;
-    const isCanvasHover = target === canvasEl || target === overlayEl || target === containerEl;
-
+    const isCanvasHover =
+      target === canvasEl || target === overlayEl || target === containerEl;
     if (!isCanvasHover) {
       if (storeGet(hovered) !== null) {
         hovered.set(null);
@@ -249,19 +240,17 @@
       const key = `${lx}_${ly}`;
       const pixelData = pixels[key];
       const color = pixelData ? pixelData.color : "#FFFFFF";
-
       hovered.set({
         x: lx,
         y: ly,
         data: pixelData,
         color,
         clientX: e.clientX,
-        clientY: e.clientY
+        clientY: e.clientY,
       });
       if (pixelData?.userId) {
         hoveredUsername = await authApi.getUsernameById(pixelData.userId);
-      }
-      else {
+      } else {
         hoveredUsername = null;
       }
     } else {
@@ -276,7 +265,6 @@
     const dy = e.clientY - dragStart.y;
     tx = txStart + dx;
     ty = tyStart + dy;
-
     if (Math.abs(dx) >= panThreshold || Math.abs(dy) >= panThreshold) {
       hasPanned = true;
     }
@@ -287,8 +275,8 @@
 
   function handlePointerUp(e: PointerEvent) {
     if (dragging) {
-        containerEl.releasePointerCapture?.(e.pointerId);
-        dragging = false;
+      containerEl.releasePointerCapture?.(e.pointerId);
+      dragging = false;
     }
   }
 
@@ -337,7 +325,8 @@
   async function handleClick(e: MouseEvent) {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    const isCanvasClick = target === canvasEl || target === overlayEl || target === containerEl;
+    const isCanvasClick =
+      target === canvasEl || target === overlayEl || target === containerEl;
     if (!isCanvasClick) return;
 
     if (hasPanned) return;
@@ -345,16 +334,14 @@
     const l = screenToLogical(e.clientX, e.clientY);
     const lx = Math.floor(l.x);
     const ly = Math.floor(l.y);
-
     if (lx < 0 || lx >= logicalWidth || ly < 0 || ly >= logicalHeight) return;
-
     const isPipette = storeGet(pipetteMode);
 
     if (isPipette) {
       const key = `${lx}_${ly}`;
       const pixel = pixels[key];
       const colorToPick = pixel ? pixel.color : "#FFFFFF";
-      
+
       handlePipettePick(colorToPick);
       pipetteMode.set(false);
       return;
@@ -368,7 +355,7 @@
 
     const color = storeGet(selectedColor) ?? "#0000FF";
     const key = `${lx}_${ly}`;
-    const previousPixel = pixels[key]; 
+    const previousPixel = pixels[key];
 
     // Optimistic update
     pixels[key] = {
@@ -376,9 +363,8 @@
       y: ly,
       color: color,
       userId: user.user_id,
-      timestamp: 0
+      timestamp: 0,
     };
-
     // Update buffer immediately
     if (offscreenCtx) {
       offscreenCtx.fillStyle = color;
@@ -389,7 +375,6 @@
     try {
       const pixelData = await canvasApi.placePixel(lx, ly, color);
       pixels[key] = pixelData;
-      // No need to redraw here, color is likely the same
     } catch (err) {
       // Revert if failed
       if (previousPixel) {
@@ -407,13 +392,12 @@
         }
       }
       draw();
-      
-      if (err instanceof CanvasAPIError && err.statusCode === 401) {  
+      if (err instanceof CanvasAPIError && err.statusCode === 401) {
         currentUser.set(null);
         isAuthModalOpen.set(true);
       } else {
         console.error("Couldn't place pixel:", err);
-      } 
+      }
     }
   }
 
@@ -426,7 +410,7 @@
           if (msg.intent === "pixel") {
             const p = msg.payload as PixelData;
             pixels[`${p.x}_${p.y}`] = p;
-            
+
             if (offscreenCtx) {
               offscreenCtx.fillStyle = p.color;
               offscreenCtx.fillRect(p.x, p.y, 1, 1);
@@ -447,13 +431,13 @@
             }
             redrawOffscreen();
             draw();
-          } 
+          }
         } catch (err) {
           console.error("WebSocket message error:", err);
         }
       };
 
-      ws.onclose = () => ws = null;
+      ws.onclose = () => (ws = null);
       ws.onerror = (e) => console.error("WebSocket error:", e);
     } catch (err) {
       console.error("Couldn't setup WebSocket:", err);
@@ -461,12 +445,11 @@
   }
 
   let resizeObserver: ResizeObserver | null = null;
-
   onMount(() => {
     if (typeof window === "undefined") return;
 
     resizeCanvases();
-    
+
     fetchCanvas();
     setupWebSocket();
 
@@ -476,6 +459,7 @@
     });
     resizeObserver.observe(containerEl);
 
+    // Keep manual event listeners for pointer capture / passive wheel
     containerEl.addEventListener("pointerdown", handlePointerDown);
     containerEl.addEventListener("pointermove", handlePointerMove);
     containerEl.addEventListener("pointerleave", handlePointerLeave);
@@ -509,38 +493,54 @@
   export const refresh = fetchCanvas;
 </script>
 
-<div bind:this={containerEl} class="container" class:pipette-cursor={$pipetteMode}>
-  <canvas bind:this={canvasEl} style="z-index:1; position:absolute; left:0; top:0;"></canvas>
-  <canvas bind:this={overlayEl} style="z-index:2; position:absolute; left:0; top:0; pointer-events:none;"></canvas>
+<div
+  bind:this={containerEl}
+  class="container"
+  class:pipette-cursor={$pipetteMode}
+>
+  <canvas
+    bind:this={canvasEl}
+    style="z-index:1; position:absolute; left:0; top:0;"
+  ></canvas>
+  <canvas
+    bind:this={overlayEl}
+    style="z-index:2; position:absolute; left:0; top:0; pointer-events:none;"
+  ></canvas>
 
   <div class="overlay-slot" style="z-index:3">
-    <slot />
+    {@render children?.()}
   </div>
 
   {#if $hovered && ($hovered.data || $pipetteMode)}
     {#key $hovered.clientX + "-" + $hovered.clientY}
-      <div class="glass-panel tooltip" style="left: {$hovered.clientX}px; top: {$hovered.clientY}px">
-        
+      <div
+        class="glass-panel tooltip"
+        style="left: {$hovered.clientX}px; top: {$hovered.clientY}px"
+      >
         {#if $pipetteMode}
-           <div class="pipette-row">
-             <div class="preview-swatch" style="background: {$hovered.color}"></div>
-             <span class="hex-code">{$hovered.color.toUpperCase()}</span>
-           </div>
-           <div class="coords">Pixel {$hovered.x}, {$hovered.y}</div>
-
+          <div class="pipette-row">
+            <div
+              class="preview-swatch"
+              style="background: {$hovered.color}"
+            ></div>
+            <span class="hex-code">{$hovered.color.toUpperCase()}</span>
+          </div>
+          <div class="coords">Pixel {$hovered.x}, {$hovered.y}</div>
         {:else}
-           <div><strong>Pixel</strong> {$hovered.x}, {$hovered.y}</div>
-           {#if $hovered.data?.timestamp === 0}
-              <div><strong>Placed by</strong> {$currentUser?.username || 'You'}</div>
-              <div>Just now</div>
-           {:else}
-              {#if hoveredUsername}
-                <div><strong>Placed by</strong> {hoveredUsername}</div>
-              {/if}
-              <div>{formatTimestamp($hovered.data?.timestamp)}</div>
-           {/if}
+          <div><strong>Pixel</strong> {$hovered.x}, {$hovered.y}</div>
+          {#if $hovered.data?.timestamp === 0}
+            <div>
+              <strong>Placed by</strong>
+              {$currentUser?.username || "You"}
+            </div>
+            <div>Just now</div>
+          {:else}
+            {#if hoveredUsername}
+              <div><strong>Placed by</strong> {hoveredUsername}</div>
+            {/if}
+            <div>{formatTimestamp($hovered.data?.timestamp)}</div>
+          {/if}
         {/if}
-
       </div>
     {/key}
   {/if}
@@ -554,11 +554,9 @@
     touch-action: none;
     background: #181a1c;
   }
-  
   .container.pipette-cursor {
     cursor: crosshair !important;
   }
-
   canvas {
     image-rendering: pixelated;
     display: block;
@@ -580,27 +578,23 @@
     transform: translate(12px, 12px);
     z-index: 100;
   }
-
   .pipette-row {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-bottom: 2px;
   }
-
   .preview-swatch {
     width: 16px;
     height: 16px;
     border-radius: 4px;
-    border: 1px solid rgba(0,0,0,0.2);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
-
   .hex-code {
     font-family: monospace;
     font-weight: 600;
   }
-
   .coords {
     opacity: 0.7;
   }

@@ -9,8 +9,12 @@
   }
 </script>
 
-<button class="glass-panel icon-btn snapshot-button" on:click={openGallery} title="Open Snapshots">
-  <CameraSolid/>
+<button
+  class="glass-panel icon-btn snapshot-button"
+  on:click={openGallery}
+  title="Open Snapshots"
+>
+  <CameraSolid />
 </button>
 
 <SnapshotGallery bind:this={gallery} />

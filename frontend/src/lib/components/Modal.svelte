@@ -1,8 +1,19 @@
 <script lang="ts">
-  export let isOpen = false;
-  export let onClose: () => void;
-  export let title: string = "";
-  export let maxWidth: string = "400px";
+  import type { Snippet } from "svelte";
+
+  let {
+    isOpen = false,
+    onClose,
+    title = "",
+    maxWidth = "400px",
+    children,
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+    title?: string;
+    maxWidth?: string;
+    children: Snippet;
+  } = $props();
 
   function handleBackdropClick(event: MouseEvent) {
     if ((event.target as HTMLElement).classList.contains("modal-backdrop")) {
@@ -12,17 +23,17 @@
 </script>
 
 {#if isOpen}
-  <div class="modal-backdrop" on:click={handleBackdropClick}>
+  <div class="modal-backdrop" onclick={handleBackdropClick}>
     <div class="modal" style="max-width: {maxWidth}">
       <div class="modal-header">
         {#if title}
           <h2>{title}</h2>
         {/if}
-        <button class="close-button" on:click={onClose}>×</button>
+        <button class="close-button" onclick={onClose}>×</button>
       </div>
-      
+
       <div class="modal-content">
-        <slot />
+        {@render children()}
       </div>
     </div>
   </div>
@@ -86,9 +97,5 @@
   .close-button:hover {
     background: rgba(0, 0, 0, 0.1);
     color: rgba(0, 0, 0, 0.8);
-  }
-
-  .modal-content {
-    /* Allow content to control its own styling */
   }
 </style>

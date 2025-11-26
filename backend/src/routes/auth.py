@@ -50,6 +50,16 @@ async def login(request: LoginRequest, response: Response, auth: AuthAdapter = D
             max_age=token.expires_in,
         )
 
+        if token.refresh_token:
+            response.set_cookie(
+                key="refresh_token",
+                value=token.refresh_token,
+                httponly=True,
+                samesite="lax",
+                path="/api/auth",
+                max_age=30 * 24 * 60 * 60, # 30 days
+            )
+
         return {
             "user": {
                 "user_id": user.user_id,
@@ -64,12 +74,56 @@ async def login(request: LoginRequest, response: Response, auth: AuthAdapter = D
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
     
+@auth_router.post("/refresh")
+async def refresh(response: Response, refresh_token: Optional[str] = Cookie(default=None, alias="refresh_token"), auth: AuthAdapter = Depends(get_auth_adapter)):
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+    
+    try:
+        user, token = await auth.refresh_token(refresh_token)
+        
+        response.set_cookie(
+            key="auth_token",
+            value=token.access_token,
+            httponly=True,
+            samesite="lax",
+            max_age=token.expires_in,
+        )
+
+        if token.refresh_token:
+             response.set_cookie(
+                key="refresh_token",
+                value=token.refresh_token,
+                httponly=True,
+                samesite="lax",
+                path="/api/auth",
+                max_age=30 * 24 * 60 * 60,
+            )
+        
+        return {
+            "user": {
+                "user_id": user.user_id,
+                "email": user.email,
+                "username": user.username,
+            },
+            "token": {
+                "access_token": token.access_token,
+                "expires_in": token.expires_in
+            },
+        }
+    except ValueError as e:
+        # If refresh fails, clear everything
+        response.delete_cookie("auth_token")
+        response.delete_cookie("refresh_token", path="/api/auth")
+        raise HTTPException(status_code=401, detail=str(e))
+
 @auth_router.post("/logout")
 async def logout(response: Response, auth_token: Optional[str] = Depends(get_token), auth: AuthAdapter = Depends(get_auth_adapter)):
     if auth_token:
         await auth.logout(auth_token)
 
     response.delete_cookie(key="auth_token")
+    response.delete_cookie(key="refresh_token", path="/api/auth")
     return {"message": "Logged out successfully"}
 
 @auth_router.get("/me")

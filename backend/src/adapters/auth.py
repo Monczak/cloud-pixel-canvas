@@ -22,6 +22,7 @@ class User:
 @dataclass
 class AuthToken:
     access_token: str
+    refresh_token: Optional[str] = None
     expires_in: Optional[int] = None
 
 class AuthAdapter(ABC):
@@ -35,6 +36,10 @@ class AuthAdapter(ABC):
 
     @abstractmethod
     async def login(self, email: str, password: str) -> tuple[User, AuthToken]:
+        pass
+
+    @abstractmethod
+    async def refresh_token(self, refresh_token: str) -> tuple[User, AuthToken]:
         pass
 
     @abstractmethod
@@ -151,6 +156,7 @@ class CognitoAuthAdapter(AuthAdapter):
             
             auth_result = response["AuthenticationResult"]
             access_token = auth_result["AccessToken"]
+            refresh_token = auth_result.get("RefreshToken")
             
             user_response = await self.cognito.get_user(AccessToken=access_token)
             
@@ -176,6 +182,7 @@ class CognitoAuthAdapter(AuthAdapter):
             
             token = AuthToken(
                 access_token=access_token,
+                refresh_token=refresh_token,
                 expires_in=auth_result.get("ExpiresIn", 3600)
             )
             
@@ -189,6 +196,34 @@ class CognitoAuthAdapter(AuthAdapter):
             else:
                 raise ValueError(f"Login failed: {e.response["Error"]["Message"]}")
     
+    async def refresh_token(self, refresh_token: str) -> tuple[User, AuthToken]:
+        try:
+            response = await self.cognito.initiate_auth(
+                ClientId=self.client_id,
+                AuthFlow="REFRESH_TOKEN_AUTH",
+                AuthParameters={
+                    "REFRESH_TOKEN": refresh_token,
+                }
+            )
+
+            auth_result = response["AuthenticationResult"]
+            access_token = auth_result["AccessToken"]
+            new_refresh_token = auth_result.get("RefreshToken") # Cognito may rotate the token or not
+
+            user = await self.get_user_from_token(access_token)
+            if not user:
+                raise ValueError("Failed to retrieve user info from refreshed token")
+            
+            token = AuthToken(
+                access_token=access_token,
+                refresh_token=new_refresh_token,
+                expires_in=auth_result.get("ExpiredIn", 3600)
+            )
+
+            return user, token
+        except ClientError as e:
+            raise ValueError(f"Token refresh failed: {e.response["Error"]["Message"]}")
+
     async def logout(self, access_token: str) -> bool:
         try:
             await self.cognito.global_sign_out(AccessToken=access_token)
@@ -350,13 +385,17 @@ class LocalMongoAuthAdapter(AuthAdapter):
         
         access_token = self._generate_token()
         refresh_token = self._generate_token()
-        expires_at = datetime.now() + timedelta(hours=24)
+        
+        now = datetime.now()
+        expires_at = now + timedelta(hours=1)
+        refresh_expires_at = now + timedelta(days=30)
 
         await self.tokens_collection.insert_one({
             "access_token": access_token,
             "refresh_token": refresh_token,
             "user_id": user_doc["user_id"],
             "expires_at": expires_at,
+            "refresh_expires_at": refresh_expires_at,
             "created_at": datetime.now(),
         })
 
@@ -370,11 +409,54 @@ class LocalMongoAuthAdapter(AuthAdapter):
 
         token = AuthToken(
             access_token=access_token,
+            refresh_token=refresh_token,
             expires_in=86400,  # 24 hours
         )
 
         return user, token
     
+    async def refresh_token(self, refresh_token: str) -> tuple[User, AuthToken]:
+        token_doc = await self.tokens_collection.find_one({"refresh_token": refresh_token})
+        if not token_doc:
+            raise ValueError("Invalid refresh token")
+        
+        if token_doc.get("refresh_expires_at") and token_doc["refresh_expires_at"] < datetime.now():
+            await self.tokens_collection.delete_one({"_id": token_doc["_id"]})
+            raise ValueError("Refresh token expired")
+        
+        user_doc = await self.users_collection.find_one({"user_id": token_doc["user_id"]})
+        if not user_doc:
+            raise ValueError("User not found")
+        
+        new_access_token = self._generate_token()
+        new_expires_at = datetime.now() + timedelta(hours=1)
+        
+        await self.tokens_collection.update_one(
+            {"_id": token_doc["_id"]},
+            {
+                "$set": {
+                    "access_token": new_access_token,
+                    "expires_at": new_expires_at
+                }
+            }
+        )
+
+        user = User(
+            user_id=user_doc["user_id"],
+            email=user_doc["email"],
+            username=user_doc["username"],
+            email_verified=user_doc["email_verified"],
+            created_at=user_doc["created_at"],
+        )
+
+        token = AuthToken(
+            access_token=new_access_token,
+            refresh_token=None, # Do not rotate refresh token for now
+            expires_in=3600
+        )
+
+        return user, token
+
     async def logout(self, access_token: str) -> bool:
         result = await self.tokens_collection.delete_one({"access_token": access_token})
         return result.deleted_count > 0
@@ -385,7 +467,8 @@ class LocalMongoAuthAdapter(AuthAdapter):
             return None
 
         if token_doc["expires_at"] < datetime.now():
-            await self.tokens_collection.delete_one({"access_token": access_token})
+            # Allow refresh token to persist
+            # await self.tokens_collection.delete_one({"access_token": access_token})
             return None
 
         user_doc = await self.users_collection.find_one(

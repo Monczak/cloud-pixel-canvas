@@ -1,4 +1,4 @@
-import { getApiBase, getWebSocketBase } from "./common";
+import { getApiBase, getWebSocketBase, fetchWithAuth } from "./common";
 
 export type PixelData = {
   x: number;
@@ -55,7 +55,7 @@ class CanvasAPI {
   }
 
   async placePixel(x: number, y: number, color: string): Promise<PixelData> {
-    const res = await fetch(`${this.baseUrl}/canvas`, {
+    const res = await fetchWithAuth(`${this.baseUrl}/canvas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -95,7 +95,7 @@ class CanvasAPI {
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch(`${this.baseUrl}/canvas/overwrite`, {
+    const res = await fetchWithAuth(`${this.baseUrl}/canvas/overwrite`, {
       method: "POST",
       credentials: "include",
       body: formData,

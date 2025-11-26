@@ -1,4 +1,4 @@
-import { getApiBase } from "./common";
+import { getApiBase, fetchWithAuth } from "./common";
 
 export type AuthUser = {
     user_id: string;
@@ -80,19 +80,20 @@ class AuthAPI {
   }
 
   async logout(): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/auth/logout`, {
+    const res = await fetchWithAuth(`${this.baseUrl}/auth/logout`, {
       method: "POST",
       credentials: "include",
     });
 
-    if (!res.ok) {
-      throw new AuthAPIError("Logout failed", res.status);
+    if (!res.ok && res.status !== 401) {
+        // Ignore 401 on logout
+        throw new AuthAPIError("Logout failed", res.status);
     }
   }
 
   async getCurrentUser(): Promise<AuthUser | null> {
     try {
-      const res = await fetch(`${this.baseUrl}/auth/me`, {
+      const res = await fetchWithAuth(`${this.baseUrl}/auth/me`, {
         credentials: "include",
       });
 

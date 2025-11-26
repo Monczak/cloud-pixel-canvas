@@ -226,7 +226,8 @@
           disabled={loading}
         />
         <div class="help-text">
-          Min 8 chars, 1 uppercase, 1 number
+          Password must have at least 8 characters in total<br>
+          At least 1 lowercase, 1 uppercase, 1 number
         </div>
       </div>
 

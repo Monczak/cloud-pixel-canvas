@@ -18,7 +18,7 @@ resource "aws_cloudwatch_metric_alarm" "backend_cpu_high" {
   statistic           = "Average"
   threshold           = 80
   alarm_description   = "Backend CPU utilization"
-  
+
   dimensions = {
     ClusterName = aws_ecs_cluster.main.name
     ServiceName = aws_ecs_service.backend.name
@@ -35,7 +35,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_target_response_time" {
   statistic           = "Average"
   threshold           = 1.0
   alarm_description   = "ALB target response time"
-  
+
   dimensions = {
     LoadBalancer = aws_lb.main.arn_suffix
   }

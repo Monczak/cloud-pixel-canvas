@@ -7,10 +7,6 @@ resource "aws_dynamodb_table" "canvas_state" {
     name = "canvas_id"
     type = "S"
   }
-
-  tags = {
-    Name = "${var.project_name}-canvas-state"
-  }
 }
 
 resource "aws_dynamodb_table" "snapshots" {
@@ -21,10 +17,6 @@ resource "aws_dynamodb_table" "snapshots" {
   attribute {
     name = "snapshot_id"
     type = "S"
-  }
-
-  tags = {
-    Name = "${var.project_name}-snapshots"
   }
 }
 
@@ -42,9 +34,5 @@ resource "aws_dynamodb_table" "snapshot_tiles" {
   attribute {
     name = "tile_id"
     type = "S"
-  }
-
-  tags = {
-    Name = "${var.project_name}-snapshot-tiles"
   }
 }

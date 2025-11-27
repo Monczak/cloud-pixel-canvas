@@ -3,12 +3,8 @@ resource "random_id" "bucket_suffix" {
 }
 
 resource "aws_s3_bucket" "snapshots" {
-  bucket = "${var.project_name}-snapshots-${random_id.bucket_suffix.hex}"
+  bucket        = "${var.project_name}-snapshots-${random_id.bucket_suffix.hex}"
   force_destroy = true
-
-  tags = {
-    Name = "${var.project_name}-snapshots"
-  }
 }
 
 resource "aws_s3_bucket_public_access_block" "snapshots" {
@@ -36,10 +32,10 @@ resource "aws_s3_bucket_policy" "snapshots" {
     ]
   })
 
-  depends_on = [aws_s3_bucket_public_access_block.snapshots]
+  depends_on = [aws_s3_bucket_public_access_block.snapshots] # Needs the block to exist to prevent 403 Forbidden
 }
 
-resource "aws_s3_bucket_cors_configuration" "snapshots" {
+resource "aws_s3_bucket_cors_configuration" "snapshots" { # Necessary for S3 file download
   bucket = aws_s3_bucket.snapshots.id
 
   cors_rule {

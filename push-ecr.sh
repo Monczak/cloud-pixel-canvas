@@ -2,13 +2,6 @@
 
 set -e
 
-# Load AWS credentials and configuration
-if [ ! -f terraform/terraform.tfvars ]; then
-    echo "Error: terraform/terraform.tfvars not found"
-    echo "Please create it with your AWS credentials and configuration"
-    exit 1
-fi
-
 # Extract ECR repository URLs from terraform output
 echo "Getting ECR repository URLs..."
 cd terraform

@@ -1,13 +1,7 @@
 resource "aws_lb" "main" {
-  name               = "${var.project_name}-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = [aws_subnet.public_1.id, aws_subnet.public_2.id]
-
-  tags = {
-    Name = "${var.project_name}-alb"
-  }
+  name            = "${var.project_name}-alb"
+  security_groups = [aws_security_group.alb.id]
+  subnets         = [aws_subnet.public_1.id, aws_subnet.public_2.id]
 }
 
 resource "aws_lb_target_group" "backend" {
@@ -18,21 +12,7 @@ resource "aws_lb_target_group" "backend" {
   target_type = "ip"
 
   health_check {
-    enabled             = true
-    path                = "/api/"
-    port                = "traffic-port"
-    protocol            = "HTTP"
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-    matcher             = "200"
-  }
-
-  deregistration_delay = 30
-
-  tags = {
-    Name = "${var.project_name}-backend-tg"
+    path = "/api/"
   }
 }
 
@@ -44,21 +24,7 @@ resource "aws_lb_target_group" "frontend" {
   target_type = "ip"
 
   health_check {
-    enabled             = true
-    path                = "/"
-    port                = "traffic-port"
-    protocol            = "HTTP"
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-    matcher             = "200"
-  }
-
-  deregistration_delay = 30
-
-  tags = {
-    Name = "${var.project_name}-frontend-tg"
+    path = "/"
   }
 }
 

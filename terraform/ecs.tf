@@ -5,10 +5,6 @@ resource "aws_ecs_cluster" "main" {
     name  = "containerInsights"
     value = "enabled"
   }
-
-  tags = {
-    Name = "${var.project_name}-cluster"
-  }
 }
 
 resource "aws_ecs_task_definition" "backend" {
@@ -21,9 +17,8 @@ resource "aws_ecs_task_definition" "backend" {
   task_role_arn            = var.lab_role_arn
 
   container_definitions = jsonencode([{
-    name      = "backend"
-    image     = "${aws_ecr_repository.backend.repository_url}:latest"
-    essential = true
+    name  = "backend"
+    image = "${aws_ecr_repository.backend.repository_url}:latest"
 
     portMappings = [{
       containerPort = 8000
@@ -110,10 +105,6 @@ resource "aws_ecs_task_definition" "backend" {
       }
     }
   }])
-
-  tags = {
-    Name = "${var.project_name}-backend-task"
-  }
 }
 
 resource "aws_ecs_task_definition" "frontend" {
@@ -126,9 +117,8 @@ resource "aws_ecs_task_definition" "frontend" {
   task_role_arn            = var.lab_role_arn
 
   container_definitions = jsonencode([{
-    name      = "frontend"
-    image     = "${aws_ecr_repository.frontend.repository_url}:latest"
-    essential = true
+    name  = "frontend"
+    image = "${aws_ecr_repository.frontend.repository_url}:latest"
 
     portMappings = [{
       containerPort = 3000
@@ -151,10 +141,6 @@ resource "aws_ecs_task_definition" "frontend" {
       }
     }
   }])
-
-  tags = {
-    Name = "${var.project_name}-frontend-task"
-  }
 }
 
 resource "aws_ecs_service" "backend" {
@@ -175,12 +161,6 @@ resource "aws_ecs_service" "backend" {
     container_name   = "backend"
     container_port   = 8000
   }
-
-  depends_on = [aws_lb_listener.main]
-
-  tags = {
-    Name = "${var.project_name}-backend-service"
-  }
 }
 
 resource "aws_ecs_service" "frontend" {
@@ -200,12 +180,6 @@ resource "aws_ecs_service" "frontend" {
     target_group_arn = aws_lb_target_group.frontend.arn
     container_name   = "frontend"
     container_port   = 3000
-  }
-
-  depends_on = [aws_lb_listener.main]
-
-  tags = {
-    Name = "${var.project_name}-frontend-service"
   }
 }
 

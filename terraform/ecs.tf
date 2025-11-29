@@ -151,9 +151,8 @@ resource "aws_ecs_service" "backend" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = [aws_subnet.public_1.id, aws_subnet.public_2.id]
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    assign_public_ip = true
+    subnets         = [aws_subnet.private_1.id, aws_subnet.private_2.id]
+    security_groups = [aws_security_group.ecs_tasks.id]
   }
 
   load_balancer {
@@ -171,9 +170,8 @@ resource "aws_ecs_service" "frontend" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = [aws_subnet.public_1.id, aws_subnet.public_2.id]
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    assign_public_ip = true
+    subnets         = [aws_subnet.private_1.id, aws_subnet.private_2.id]
+    security_groups = [aws_security_group.ecs_tasks.id]
   }
 
   load_balancer {

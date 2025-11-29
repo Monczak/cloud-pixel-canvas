@@ -1,8 +1,3 @@
-resource "aws_elasticache_subnet_group" "main" {
-  name       = "${var.project_name}-valkey-subnet-group"
-  subnet_ids = [aws_subnet.public_1.id, aws_subnet.public_2.id]
-}
-
 resource "aws_security_group" "valkey" {
   name        = "${var.project_name}-valkey-sg"
   description = "Valkey Security Group"
@@ -43,5 +38,5 @@ resource "aws_elasticache_serverless_cache" "main" {
   major_engine_version = 7
 
   security_group_ids = [aws_security_group.valkey.id]
-  subnet_ids         = [aws_subnet.public_1.id, aws_subnet.public_2.id]
+  subnet_ids         = [aws_subnet.private_1.id, aws_subnet.private_2.id]
 }

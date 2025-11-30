@@ -4,7 +4,7 @@ from typing import List
 class Config:
     def __init__(self) -> None:
         self.environment: str = os.getenv("ENVIRONMENT", "local")
-        self.cors_origins: List[str] = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+        self.cors_origins: List[str] = os.getenv("CORS_ORIGINS", "").split(",")
         self.system_key: str = os.getenv("SYSTEM_KEY", "very-secret-key")
 
         self.tile_size: int = int(os.getenv("TILE_SIZE", 32))

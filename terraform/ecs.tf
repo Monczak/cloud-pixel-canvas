@@ -71,10 +71,6 @@ resource "aws_ecs_task_definition" "backend" {
         value = tostring(var.max_snapshots)
       },
       {
-        name  = "CORS_ORIGINS"
-        value = "http://${aws_lb.main.dns_name}"
-      },
-      {
         name  = "SYSTEM_KEY"
         value = tostring(random_password.system_key.result)
       },

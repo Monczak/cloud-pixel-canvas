@@ -63,7 +63,6 @@ class CognitoAuthAdapter(AuthAdapter):
         self.cognito = cognito_client
         self.user_pool_id = config.cognito_user_pool_id
         self.client_id = config.cognito_client_id
-        self.client_secret = config.cognito_client_secret
     
     async def username_exists(self, username: str) -> bool:
         try:

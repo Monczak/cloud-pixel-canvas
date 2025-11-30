@@ -68,7 +68,6 @@ class CanvasService:
         await self.db.bulk_update_canvas(pixel_objects)
 
         try:
-            # Reconstruct simple map for frontend
             broadcast_payload = {
                 f"{p.x}_{p.y}": p.model_dump() for p in pixel_objects
             }
@@ -88,7 +87,6 @@ class CanvasService:
         }
 
     async def bulk_overwrite(self, pixels_dict: Dict[str, Dict]) -> None:
-        # Convert Dict -> List[PixelData]
         pixel_objects = [PixelData(**p) for p in pixels_dict.values()]
         
         await self.db.bulk_overwrite_canvas(pixel_objects)

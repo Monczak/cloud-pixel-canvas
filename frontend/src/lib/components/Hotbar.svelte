@@ -177,7 +177,6 @@
 />
 
 <style>
-  /* Same styles as before */
   .hotbar-container {
     display: flex;
     flex-direction: column;

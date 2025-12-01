@@ -21,6 +21,9 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+class RefreshRequest(BaseModel):
+    email: EmailStr
+
 @auth_router.post("/register")
 async def register(request: RegisterRequest, auth: AuthAdapter = Depends(get_auth_adapter)):
     try:
@@ -75,12 +78,17 @@ async def login(request: LoginRequest, response: Response, auth: AuthAdapter = D
         raise HTTPException(status_code=401, detail=str(e))
     
 @auth_router.post("/refresh")
-async def refresh(response: Response, refresh_token: Optional[str] = Cookie(default=None, alias="refresh_token"), auth: AuthAdapter = Depends(get_auth_adapter)):
+async def refresh(
+    response: Response, 
+    request: RefreshRequest, 
+    refresh_token: Optional[str] = Cookie(default=None, alias="refresh_token"), 
+    auth: AuthAdapter = Depends(get_auth_adapter)
+):
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token missing")
     
     try:
-        user, token = await auth.refresh_token(refresh_token)
+        user, token = await auth.refresh_token(request.email, refresh_token)
         
         response.set_cookie(
             key="auth_token",

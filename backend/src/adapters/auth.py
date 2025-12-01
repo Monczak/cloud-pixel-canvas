@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
+import base64
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hashlib
+import hmac
 import secrets
 from typing import Dict, Optional
 import uuid
@@ -39,7 +41,7 @@ class AuthAdapter(ABC):
         pass
 
     @abstractmethod
-    async def refresh_token(self, refresh_token: str) -> tuple[User, AuthToken]:
+    async def refresh_token(self, email: str, refresh_token: str) -> tuple[User, AuthToken]:
         pass
 
     @abstractmethod
@@ -63,7 +65,17 @@ class CognitoAuthAdapter(AuthAdapter):
         self.cognito = cognito_client
         self.user_pool_id = config.cognito_user_pool_id
         self.client_id = config.cognito_client_id
+        self.client_secret = config.cognito_client_secret
     
+    def _get_secret_hash(self, username: str) -> str:
+        message = username + self.client_id
+        digest = hmac.new(
+            str(self.client_secret).encode("utf-8"),
+            msg=str(message).encode("utf-8"),
+            digestmod=hashlib.sha256
+        ).digest()
+        return base64.b64encode(digest).decode()
+
     async def username_exists(self, username: str) -> bool:
         try:
             response = await self.cognito.list_users(
@@ -82,6 +94,7 @@ class CognitoAuthAdapter(AuthAdapter):
         try:
             response = await self.cognito.sign_up(
                 ClientId=self.client_id,
+                SecretHash=self._get_secret_hash(email),
                 Username=email,
                 Password=password,
                 UserAttributes=[
@@ -107,6 +120,7 @@ class CognitoAuthAdapter(AuthAdapter):
         try:
             await self.cognito.confirm_sign_up(
                 ClientId=self.client_id,
+                SecretHash=self._get_secret_hash(email),
                 Username=email,
                 ConfirmationCode=code
             )
@@ -150,6 +164,7 @@ class CognitoAuthAdapter(AuthAdapter):
                 AuthParameters={
                     "USERNAME": email,
                     "PASSWORD": password,
+                    "SECRET_HASH": self._get_secret_hash(email),
                 }
             )
             
@@ -195,13 +210,14 @@ class CognitoAuthAdapter(AuthAdapter):
             else:
                 raise ValueError(f"Login failed: {e.response["Error"]["Message"]}")
     
-    async def refresh_token(self, refresh_token: str) -> tuple[User, AuthToken]:
+    async def refresh_token(self, email: str, refresh_token: str) -> tuple[User, AuthToken]:
         try:
             response = await self.cognito.initiate_auth(
                 ClientId=self.client_id,
                 AuthFlow="REFRESH_TOKEN_AUTH",
                 AuthParameters={
                     "REFRESH_TOKEN": refresh_token,
+                    "SECRET_HASH": self._get_secret_hash(email),
                 }
             )
 
@@ -414,7 +430,7 @@ class LocalMongoAuthAdapter(AuthAdapter):
 
         return user, token
     
-    async def refresh_token(self, refresh_token: str) -> tuple[User, AuthToken]:
+    async def refresh_token(self, email: str, refresh_token: str) -> tuple[User, AuthToken]:
         token_doc = await self.tokens_collection.find_one({"refresh_token": refresh_token})
         if not token_doc:
             raise ValueError("Invalid refresh token")

@@ -20,7 +20,6 @@ resource "aws_cognito_user_pool" "main" {
     name                = "email"
     attribute_data_type = "String"
     required            = true
-    mutable             = true
 
     string_attribute_constraints {
       min_length = 1
@@ -32,7 +31,6 @@ resource "aws_cognito_user_pool" "main" {
     name                = "preferred_username"
     attribute_data_type = "String"
     required            = true
-    mutable             = true
 
     string_attribute_constraints {
       min_length = 3
@@ -54,6 +52,8 @@ resource "aws_cognito_user_pool" "main" {
 resource "aws_cognito_user_pool_client" "main" {
   name         = "${var.project_name}-client"
   user_pool_id = aws_cognito_user_pool.main.id
+
+  generate_secret = true
 
   explicit_auth_flows = [
     "ALLOW_USER_PASSWORD_AUTH",

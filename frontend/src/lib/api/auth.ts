@@ -76,10 +76,20 @@ class AuthAPI {
       body: JSON.stringify({ email, password }),
     });
 
-    return this.handleResponse(res, "Login failed");
+    const data = this.handleResponse(res, "Login failed");
+
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("user_email", email);
+    }
+
+    return data;
   }
 
   async logout(): Promise<void> {
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem("user_email");
+    }
+    
     const res = await fetchWithAuth(`${this.baseUrl}/auth/logout`, {
       method: "POST",
       credentials: "include",

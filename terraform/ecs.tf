@@ -55,6 +55,10 @@ resource "aws_ecs_task_definition" "backend" {
         value = aws_cognito_user_pool_client.main.id
       },
       {
+        name  = "COGNITO_CLIENT_SECRET"
+        value = aws_cognito_user_pool_client.main.client_secret
+      },
+      {
         name  = "S3_BUCKET_NAME"
         value = aws_s3_bucket.snapshots.id
       },

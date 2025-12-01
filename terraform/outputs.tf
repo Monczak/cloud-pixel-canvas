@@ -28,6 +28,12 @@ output "cognito_client_id" {
   value       = aws_cognito_user_pool_client.main.id
 }
 
+output "cognito_client_secret" {
+  description = "Client secret for the Cognito User Pool Client"
+  value       = aws_cognito_user_pool_client.main.client_secret
+  sensitive   = true
+}
+
 output "s3_bucket_name" {
   description = "Name of the S3 bucket for snapshots"
   value       = aws_s3_bucket.snapshots.id

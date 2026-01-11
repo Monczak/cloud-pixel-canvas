@@ -1,0 +1,80 @@
+services:
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    networks:
+      - cloud-pixel-canvas-network
+
+  backend:
+    build:
+      context: backend
+      dockerfile: Dockerfile
+    environment:
+      - ENVIRONMENT=portable
+      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_DB=pixel_canvas
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+      - VALKEY_HOST=valkey
+      - VALKEY_PORT=6379
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_PUBLIC_DOMAIN=http://localhost:9000
+      - S3_BUCKET_NAME=pixel-canvas-snapshots
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_REGION=us-east-1
+    networks:
+      - cloud-pixel-canvas-network
+    depends_on:
+      - mongo
+      - valkey
+      - minio
+
+  mongo:
+    image: mongo
+    ports:
+      - 27017:27017
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=pixel_canvas
+    networks:
+      - cloud-pixel-canvas-network
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - 6379:6379
+    networks:
+      - cloud-pixel-canvas-network
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - cloud-pixel-canvas-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - 80:80
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - cloud-pixel-canvas-network
+
+networks:
+  cloud-pixel-canvas-network:
+    driver: bridge
+  
+volumes:
+  mongo_data:
+  minio_data:

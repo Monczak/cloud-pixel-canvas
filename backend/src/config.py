@@ -39,6 +39,8 @@ class Config:
         self.cognito_client_id: str = os.getenv("COGNITO_CLIENT_ID", "")
         self.cognito_client_secret: str = os.getenv("COGNITO_CLIENT_SECRET", "")
 
+        self.s3_endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "")
+        self.s3_public_domain: str = os.getenv("S3_PUBLIC_DOMAIN", "")
         self.s3_bucket_name: str = os.getenv("S3_BUCKET_NAME", "")
 
     def is_local(self) -> bool:

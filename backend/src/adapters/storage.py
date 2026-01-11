@@ -39,11 +39,12 @@ class StorageAdapter(ABC):
         pass
 
 class S3StorageAdapter(StorageAdapter):
-    def __init__(self, s3_client):
+    def __init__(self, s3_client, bucket_name: str | None = None, public_domain: str | None = None):
         self.s3 = s3_client
-        self.bucket_name = config.s3_bucket_name
+        self.bucket_name = bucket_name or config.s3_bucket_name
         self.region = config.aws_region
-    
+        self.public_domain = public_domain or config.s3_public_domain
+
     async def upload_file(self, key: str, file_data: BinaryIO) -> StorageFile:
         try:
             file_content = file_data.read()
@@ -86,6 +87,9 @@ class S3StorageAdapter(StorageAdapter):
             return False
     
     def get_file_url(self, key: str) -> str:
+        if self.public_domain:
+            return f"{self.public_domain}/{self.bucket_name}/{key}"
+        
         return f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{key}"
     
     async def file_exists(self, key: str) -> bool:

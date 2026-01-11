@@ -50,34 +50,9 @@ async def lifespan(app: FastAPI):
                 aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
                 aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
             ) as s3: # type: ignore
-                dep_manager.storage = S3StorageAdapter(s3, bucket_name=config.s3_bucket_name, public_domain=config.s3_public_domain)
-
-                # Ensure bucket exists
-                try:
-                    await s3.head_bucket(Bucket=config.s3_bucket_name)
-                except Exception:
-                    await s3.create_bucket(Bucket=config.s3_bucket_name)
-
-                # Ensure bucket is public
-                try:
-                    policy = {
-                        "Version": "2012-10-17",
-                        "Statement": [
-                            {
-                                "Sid": "PublicReadGetObject",
-                                "Effect": "Allow",
-                                "Principal": "*",
-                                "Action": "s3:GetObject",
-                                "Resource": f"arn:aws:s3:::{config.s3_bucket_name}/*"
-                            }
-                        ]
-                    }
-                    await s3.put_bucket_policy(
-                        Bucket=config.s3_bucket_name, 
-                        Policy=json.dumps(policy)
-                    )
-                except Exception as e:
-                    print(f"Warning: Could not set bucket policy: {e}")
+                storage = S3StorageAdapter(s3, bucket_name=config.s3_bucket_name, public_domain=config.s3_public_domain)
+                await storage.ensure_bucket_exists(make_public=True)
+                dep_manager.storage = storage
 
                 yield
 

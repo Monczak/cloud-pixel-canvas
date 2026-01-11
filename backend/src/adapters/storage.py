@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
+import json
 from os import PathLike
 from pathlib import Path
 import shutil
@@ -45,6 +46,31 @@ class S3StorageAdapter(StorageAdapter):
         self.region = config.aws_region
         self.public_domain = public_domain or config.s3_public_domain
 
+    async def ensure_bucket_exists(self, make_public: bool = False) -> None:
+        try:
+            await self.s3.head_bucket(Bucket=self.bucket_name)
+        except Exception:
+            await self.s3.create_bucket(Bucket=self.bucket_name)
+            if make_public:
+                policy = {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": "*",
+                            "Action": ["s3:GetObject"],
+                            "Resource": [f"arn:aws:s3:::{self.bucket_name}/*"]
+                        }
+                    ]
+                }
+                try:
+                    await self.s3.put_bucket_policy(
+                        Bucket=self.bucket_name,
+                        Policy=json.dumps(policy)
+                    )
+                except Exception as e:
+                    print(f"Error setting bucket policy: {e}")
+    
     async def upload_file(self, key: str, file_data: BinaryIO) -> StorageFile:
         try:
             file_content = file_data.read()

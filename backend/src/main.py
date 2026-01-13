@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import aioboto3
 from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from adapters.db import DynamoDBAdapter, MongoDBAdapter
 from adapters.auth import CognitoAuthAdapter, KeycloakAuthAdapter, LocalMongoAuthAdapter
@@ -15,6 +16,8 @@ from routes.canvas import canvas_router
 from routes.static import static_router
 from wsmanager import manager as ws_manager
 from deps import manager as dep_manager
+
+instrumentator = Instrumentator()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -69,6 +72,8 @@ async def lifespan(app: FastAPI):
     await ws_manager.shutdown()
 
 app = FastAPI(title="Cloud Pixel Canvas API", lifespan=lifespan)
+
+instrumentator.instrument(app).expose(app)
 
 app.add_middleware(
     CORSMiddleware,

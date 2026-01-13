@@ -9,6 +9,7 @@ from PIL import Image
 
 from adapters.db import DBAdapter, get_db_adapter
 from adapters.storage import StorageAdapter, get_storage_adapter
+from metrics import PIXELS_PLACED, SNAPSHOTS_TAKEN
 from models import PixelData
 from config import config
 from wsmanager import manager as websocket
@@ -53,6 +54,8 @@ class CanvasService:
             })
         except Exception as e:
             print(f"WebSocket broadcast failed: {e}")
+
+        PIXELS_PLACED.labels(color=color).inc()
         
         return result
     
@@ -63,7 +66,10 @@ class CanvasService:
         for p_data in pixels_map.values():
             p_data["userId"] = user_id
             p_data["timestamp"] = timestamp
-            pixel_objects.append(PixelData(**p_data))
+
+            p = PixelData(**p_data)
+            pixel_objects.append(p)
+            PIXELS_PLACED.labels(color=p.color).inc()
 
         await self.db.bulk_update_canvas(pixel_objects)
 
@@ -151,6 +157,8 @@ class CanvasService:
 
         image_url = self.storage.get_file_url(image_key)
         thumbnail_url = self.storage.get_file_url(thumbnail_key)
+
+        SNAPSHOTS_TAKEN.inc()
 
         return {
             "snapshot_id": snapshot_id,

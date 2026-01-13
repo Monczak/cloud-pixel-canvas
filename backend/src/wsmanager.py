@@ -4,6 +4,7 @@ import asyncio
 import json
 
 from adapters.pubsub import PubSubAdapter
+from metrics import ACTIVE_CONNECTIONS
 from config import config
 
 class ConnectionManager:
@@ -50,10 +51,12 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active.append(websocket)
+        ACTIVE_CONNECTIONS.set(len(self.active))
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active:
             self.active.remove(websocket)
+            ACTIVE_CONNECTIONS.set(len(self.active))
 
     async def _handle_broadcast(self, message: Dict):
         data = json.dumps(message)

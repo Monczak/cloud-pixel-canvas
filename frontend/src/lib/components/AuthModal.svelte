@@ -83,9 +83,14 @@
     loading = true;
     error = "";
     try {
-      await authApi.register(email, username, password);
-      pendingVerificationEmail.set(email);
-      switchToVerify();
+      const res = await authApi.register(email, username, password);
+      
+      if (res.requires_verification) {
+        pendingVerificationEmail.set(email);
+        switchToVerify();
+      } else {
+        await handleLogin();
+      }
     } catch (err) {
       if (err instanceof AuthAPIError) {
         error = err.message;

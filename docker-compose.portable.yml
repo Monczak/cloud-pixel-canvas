@@ -17,6 +17,11 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
       - VALKEY_HOST=valkey
       - VALKEY_PORT=6379
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=pixel-canvas
+      - KEYCLOAK_CLIENT_ID=pixel-canvas-client
+      - KEYCLOAK_ADMIN_USERNAME=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
       - S3_ENDPOINT_URL=http://minio:9000
       - S3_PUBLIC_DOMAIN=http://localhost:9000
       - S3_BUCKET_NAME=pixel-canvas-snapshots
@@ -26,9 +31,19 @@ services:
     networks:
       - cloud-pixel-canvas-network
     depends_on:
-      - mongo
-      - valkey
-      - minio
+      mongo:
+        condition: service_started
+      valkey:
+        condition: service_started
+      minio:
+        condition: service_started
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   mongo:
     image: mongo
@@ -51,14 +66,52 @@ services:
   minio:
     image: minio/minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - 9000:9000
+      - 9001:9001
     environment:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    networks:
+      - cloud-pixel-canvas-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5.0
+    command: start-dev --import-realm
+    environment:
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=keycloakpassword
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+      - KC_HTTP_ENABLED=true
+      - KC_HOSTNAME_STRICT=false
+      - KC_HEALTH_ENABLED=true
+    ports:
+      - 8080:8080
+    volumes:
+      - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json
+    depends_on:
+      - keycloak-db
+    networks:
+      - cloud-pixel-canvas-network
+    healthcheck:
+      test: ["CMD-SHELL", "{ printf 'HEAD /health/ready HTTP/1.0\r\n\r\n' >&0; grep 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/9000"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  keycloak-db:
+    image: postgres:18-alpine
+    environment:
+      - POSTGRES_DB=keycloak
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=keycloakpassword
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
     networks:
       - cloud-pixel-canvas-network
 
@@ -70,6 +123,9 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - cloud-pixel-canvas-network
+    depends_on:
+      backend:
+        condition: service_healthy
 
 networks:
   cloud-pixel-canvas-network:
@@ -78,3 +134,4 @@ networks:
 volumes:
   mongo_data:
   minio_data:
+  keycloak_db_data:

@@ -6,7 +6,7 @@ from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from adapters.db import DynamoDBAdapter, MongoDBAdapter
-from adapters.auth import CognitoAuthAdapter, LocalMongoAuthAdapter
+from adapters.auth import CognitoAuthAdapter, KeycloakAuthAdapter, LocalMongoAuthAdapter
 from adapters.storage import LocalFileStorageAdapter, S3StorageAdapter
 from adapters.pubsub import ValkeyPubSubAdapter
 from config import config
@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
 
         case "portable":
             dep_manager.db = MongoDBAdapter()
-            dep_manager.auth = LocalMongoAuthAdapter(config.mongo_uri, config.mongo_db) # TODO: Replace with Keycloak adapter
+            dep_manager.auth = KeycloakAuthAdapter()
 
             async with session.client(
                 "s3", 

@@ -9,6 +9,7 @@ from typing import Dict, Optional
 import uuid
 
 from botocore.exceptions import ClientError
+from keycloak import KeycloakAdmin, KeycloakError, KeycloakOpenID
 from pymongo import AsyncMongoClient
 
 from config import config
@@ -513,6 +514,143 @@ class LocalMongoAuthAdapter(AuthAdapter):
             created_at=user_doc["created_at"],
         )
 
+class KeycloakAuthAdapter(AuthAdapter):
+    def __init__(self):
+        self.server_url = config.keycloak_url
+        self.realm = config.keycloak_realm
+        self.client_id = config.keycloak_client_id
+        self.client_secret = config.keycloak_client_secret
+
+        self.openid = KeycloakOpenID(
+            server_url=self.server_url,
+            client_id=self.client_id,
+            realm_name=self.realm,
+            client_secret_key=self.client_secret,
+            verify=True,
+        )
+
+    async def _get_admin(self, realm: str = "master") -> KeycloakAdmin:
+        return KeycloakAdmin(
+            server_url=self.server_url,
+            username=config.keycloak_admin_username,
+            password=config.keycloak_admin_password,
+            realm_name=realm,
+            user_realm_name="master", # Admin users usually live in master
+            verify=True,
+        )
+
+    async def register(self, email: str, username: str, password: str) -> Dict:
+        try:
+            admin = await self._get_admin(realm=self.realm)
+            user_id = await admin.a_create_user({
+                "email": email,
+                "username": username,
+                "enabled": True,
+                "emailVerified": True,
+                # [HACK] Working around https://github.com/keycloak/keycloak/issues/36108
+                "requiredActions": [],
+                "firstName": username,
+                "lastName": username,
+            })
+            
+            await admin.a_set_user_password(user_id, password, temporary=False)
+            
+            return {
+                "requires_verification": False,
+                "user_id": user_id
+            }
+        except KeycloakError as e:
+            if e.response_code == 409:
+                raise ValueError("Username or email already exists")
+            raise ValueError(f"Registration failed: {e}")
+
+    async def verify_email(self, email: str, code: str) -> User:
+        raise NotImplementedError("Email verification out of scope for KeycloakAuthAdapter")
+
+    async def login(self, email: str, password: str) -> tuple[User, AuthToken]:
+        try:
+            token_data = await self.openid.a_token(username=email, password=password)
+            user_info = await self.openid.a_userinfo(token_data["access_token"])
+            
+            user = User(
+                user_id=user_info["sub"],
+                email=user_info.get("email", ""),
+                username=user_info.get("preferred_username", ""),
+                email_verified=user_info.get("email_verified", False),
+                created_at=datetime.now()
+            )
+            
+            token = AuthToken(
+                access_token=token_data["access_token"],
+                refresh_token=token_data.get("refresh_token"),
+                expires_in=token_data.get("expires_in")
+            )
+            
+            return user, token
+        except KeycloakError as e:
+            raise ValueError("Invalid credentials")
+
+    async def refresh_token(self, email: str, refresh_token: str) -> tuple[User, AuthToken]:
+        try:
+            token_data = await self.openid.a_refresh_token(refresh_token)
+            
+            user = await self.get_user_from_token(token_data["access_token"])
+            if not user:
+                raise ValueError("Could not validate refreshed user")
+
+            token = AuthToken(
+                access_token=token_data["access_token"],
+                refresh_token=token_data.get("refresh_token"),
+                expires_in=token_data.get("expires_in")
+            )
+            return user, token
+        except Exception:
+            raise ValueError("Token refresh failed")
+
+    async def logout(self, access_token: str) -> bool:
+        try:
+            await self.openid.a_logout(access_token)
+            return True
+        except Exception:
+            return False
+
+    async def get_user_from_token(self, access_token: str) -> Optional[User]:
+        try:
+            user_info = await self.openid.a_userinfo(access_token)
+            return User(
+                user_id=user_info["sub"],
+                email=user_info.get("email", ""),
+                username=user_info.get("preferred_username", ""),
+                email_verified=user_info.get("email_verified", False),
+                created_at=datetime.now()
+            )
+        except Exception:
+            return None
+
+    async def get_user_by_id(self, user_id: str) -> Optional[User]:
+        try:
+            admin = await self._get_admin(realm=self.realm)
+            user_data = await admin.a_get_user(user_id)
+            if not user_data:
+                return None
+            
+            return User(
+                user_id=user_data["id"],
+                email=user_data.get("email", ""),
+                username=user_data.get("username", ""),
+                email_verified=user_data.get("emailVerified", False),
+                created_at=datetime.fromtimestamp(user_data.get("createdTimestamp", 0) / 1000)
+            )
+        except Exception:
+            return None
+        
+    async def username_exists(self, username: str) -> bool:
+        try:
+            admin = await self._get_admin(realm=self.realm)
+            users = await admin.a_get_users({"username": username})
+            return len(users) > 0
+        except Exception:
+            return False
 
 def get_auth_adapter() -> AuthAdapter:
     from deps import manager

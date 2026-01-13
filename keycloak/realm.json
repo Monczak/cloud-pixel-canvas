@@ -1,0 +1,15 @@
+{
+  "realm": "pixel-canvas",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "pixel-canvas-client",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "redirectUris": [],
+      "webOrigins": []
+    }
+  ]
+}

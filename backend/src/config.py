@@ -28,6 +28,14 @@ class Config:
         self.valkey_port: int = int(os.getenv("VALKEY_PORT", 6379))
         self.valkey_ssl: bool = os.getenv("VALKEY_SSL", "false").lower() == "true"
 
+        # Keycloak
+        self.keycloak_url: str = os.getenv("KEYCLOAK_URL", "http://localhost:8080")
+        self.keycloak_realm: str = os.getenv("KEYCLOAK_REALM", "pixel-canvas")
+        self.keycloak_client_id: str = os.getenv("KEYCLOAK_CLIENT_ID", "pixel-canvas-client")
+        self.keycloak_client_secret: str = os.getenv("KEYCLOAK_CLIENT_SECRET", "")
+        self.keycloak_admin_username: str = os.getenv("KEYCLOAK_ADMIN_USERNAME", "admin")
+        self.keycloak_admin_password: str = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
+
         # AWS
         self.aws_region: str = os.getenv("AWS_REGION", "us-east-1")
 

@@ -12,19 +12,24 @@ services:
       dockerfile: Dockerfile
     environment:
       - ENVIRONMENT=portable
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
       - MONGO_URI=mongodb://mongo:27017
       - MONGO_DB=pixel_canvas
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
       - VALKEY_HOST=valkey
       - VALKEY_PORT=6379
+
       - KEYCLOAK_URL=http://keycloak:8080
       - KEYCLOAK_REALM=pixel-canvas
       - KEYCLOAK_CLIENT_ID=pixel-canvas-client
-      - KEYCLOAK_ADMIN_USERNAME=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KEYCLOAK_BACKEND_CLIENT_ID=pixel-canvas-backend
+      - KEYCLOAK_BACKEND_CLIENT_SECRET=very-secret
+
       - S3_ENDPOINT_URL=http://minio:9000
       - S3_PUBLIC_DOMAIN=http://localhost:9000
       - S3_BUCKET_NAME=pixel-canvas-snapshots
+
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - AWS_REGION=us-east-1
@@ -37,8 +42,8 @@ services:
         condition: service_started
       minio:
         condition: service_started
-      keycloak:
-        condition: service_healthy
+      keycloak-setup:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/api/ || exit 1"]
       interval: 5s
@@ -112,6 +117,31 @@ services:
       - POSTGRES_PASSWORD=keycloakpassword
     volumes:
       - keycloak_db_data:/var/lib/postgresql/data
+    networks:
+      - cloud-pixel-canvas-network
+
+  keycloak-setup:
+    image: alpine:latest
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    volumes:
+      - ./keycloak/setup.sh:/setup.sh
+    environment:
+      - KC_URL=http://keycloak:8080
+      - KC_HEALTH_URL=http://keycloak:9000
+      - REALM=pixel-canvas
+      
+      - BOOTSTRAP_USER=admin
+      - BOOTSTRAP_PASS=admin
+      
+      - BACKEND_CLIENT_ID=pixel-canvas-backend
+      - BACKEND_CLIENT_SECRET=very-secret
+      
+      - PERM_ADMIN_USER=superadmin
+      - PERM_ADMIN_PASS=superpass
+    command: >
+      sh -c "apk add --no-cache curl jq && chmod +x /setup.sh && /setup.sh"
     networks:
       - cloud-pixel-canvas-network
 

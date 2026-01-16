@@ -37,6 +37,10 @@ class Config:
         self.keycloak_admin_username: str = os.getenv("KEYCLOAK_ADMIN_USERNAME", "admin")
         self.keycloak_admin_password: str = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
 
+        # MinIO
+        self.minio_access_key: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+        self.minio_secret_key: str = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+
         # AWS
         self.aws_region: str = os.getenv("AWS_REGION", "us-east-1")
 

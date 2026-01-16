@@ -30,8 +30,9 @@ services:
       - S3_PUBLIC_DOMAIN=http://localhost:9000
       - S3_BUCKET_NAME=pixel-canvas-snapshots
 
-      - AWS_ACCESS_KEY_ID=minioadmin
-      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      
       - AWS_REGION=us-east-1
     networks:
       - cloud-pixel-canvas-network

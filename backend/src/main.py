@@ -66,8 +66,8 @@ async def lifespan(app: FastAPI):
                 "s3", 
                 region_name=config.aws_region, 
                 endpoint_url=config.s3_endpoint_url,
-                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+                aws_access_key_id=config.minio_access_key,
+                aws_secret_access_key=config.minio_secret_key
             ) as s3: # type: ignore
                 storage = S3StorageAdapter(s3, bucket_name=config.s3_bucket_name, public_domain=config.s3_public_domain)
                 await wait_for_dependency(lambda: storage.ensure_bucket_exists(make_public=True), "MinIO Storage")

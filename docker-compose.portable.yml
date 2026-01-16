@@ -14,7 +14,7 @@ services:
       - ENVIRONMENT=portable
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 
-      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_URI=mongodb://root:rootpass@mongo:27017
       - MONGO_DB=pixel_canvas
 
       - VALKEY_HOST=valkey
@@ -58,6 +58,8 @@ services:
       - mongo_data:/data/db
     environment:
       - MONGO_INITDB_DATABASE=pixel_canvas
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=rootpass
     networks:
       - cloud-pixel-canvas-network
 

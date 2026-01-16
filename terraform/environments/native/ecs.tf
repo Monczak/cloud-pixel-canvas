@@ -151,7 +151,7 @@ resource "aws_ecs_service" "backend" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = [aws_subnet.private_1.id, aws_subnet.private_2.id]
+    subnets         = module.vpc.private_subnets
     security_groups = [aws_security_group.ecs_tasks.id]
   }
 
@@ -170,7 +170,7 @@ resource "aws_ecs_service" "frontend" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = [aws_subnet.private_1.id, aws_subnet.private_2.id]
+    subnets         = module.vpc.private_subnets
     security_groups = [aws_security_group.ecs_tasks.id]
   }
 
@@ -184,7 +184,7 @@ resource "aws_ecs_service" "frontend" {
 resource "aws_security_group" "ecs_tasks" {
   name        = "${var.project_name}-ecs-tasks-sg"
   description = "ECS Tasks Security Group"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = module.vpc.vpc_id
 
   ingress {
     from_port       = 8000

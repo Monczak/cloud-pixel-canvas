@@ -1,7 +1,7 @@
 resource "aws_security_group" "valkey" {
   name        = "${var.project_name}-valkey-sg"
   description = "Valkey Security Group"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = module.vpc.vpc_id
 
   ingress {
     from_port       = 6379
@@ -38,5 +38,5 @@ resource "aws_elasticache_serverless_cache" "main" {
   major_engine_version = 7
 
   security_group_ids = [aws_security_group.valkey.id]
-  subnet_ids         = [aws_subnet.private_1.id, aws_subnet.private_2.id]
+  subnet_ids         = module.vpc.private_subnets
 }

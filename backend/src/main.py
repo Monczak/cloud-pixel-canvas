@@ -1,4 +1,6 @@
+import asyncio
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 import aioboto3
@@ -19,6 +21,19 @@ from deps import manager as dep_manager
 
 instrumentator = Instrumentator()
 
+logger = logging.getLogger("uvicorn")
+
+async def wait_for_dependency(func, name, retries=10, delay=3):
+    for i in range(retries):
+        try:
+            await func()
+            logger.info(f"Connected to {name}")
+            return
+        except Exception as e:
+            logger.warning(f"Waiting for {name} (attempt {i+1}/{retries})... Error: {e}")
+            await asyncio.sleep(delay)
+    raise RuntimeError(f"Could not connect to {name} after {retries} attempts")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     session = aioboto3.Session()
@@ -29,7 +44,8 @@ async def lifespan(app: FastAPI):
         ssl=config.valkey_ssl,
     )
     ws_manager.init_pubsub(pubsub_adapter)
-    await ws_manager.start_listening()
+
+    await wait_for_dependency(ws_manager.start_listening, "Valkey Pubsub")
 
     match config.environment:
         case "aws":
@@ -54,7 +70,7 @@ async def lifespan(app: FastAPI):
                 aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
             ) as s3: # type: ignore
                 storage = S3StorageAdapter(s3, bucket_name=config.s3_bucket_name, public_domain=config.s3_public_domain)
-                await storage.ensure_bucket_exists(make_public=True)
+                await wait_for_dependency(lambda: storage.ensure_bucket_exists(make_public=True), "MinIO Storage")
                 dep_manager.storage = storage
 
                 yield

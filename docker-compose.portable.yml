@@ -86,7 +86,9 @@ services:
       - cloud-pixel-canvas-network
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.5.0
+    build:
+      context: keycloak
+      dockerfile: Dockerfile
     command: start-dev --import-realm
     environment:
       - KC_DB=postgres
@@ -100,8 +102,6 @@ services:
       - KC_HEALTH_ENABLED=true
     ports:
       - 8080:8080
-    volumes:
-      - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json
     depends_on:
       - keycloak-db
     networks:
@@ -124,12 +124,12 @@ services:
       - cloud-pixel-canvas-network
 
   keycloak-setup:
-    image: alpine:latest
+    build:
+      context: keycloak/setup
+      dockerfile: Dockerfile
     depends_on:
       keycloak:
         condition: service_healthy
-    volumes:
-      - ./keycloak/setup.sh:/setup.sh
     environment:
       - KC_URL=http://keycloak:8080
       - KC_HEALTH_URL=http://keycloak:9000
@@ -143,8 +143,6 @@ services:
       
       - PERM_ADMIN_USER=superadmin
       - PERM_ADMIN_PASS=superpass
-    command: >
-      sh -c "apk add --no-cache curl jq && chmod +x /setup.sh && /setup.sh"
     networks:
       - cloud-pixel-canvas-network
 
@@ -161,11 +159,11 @@ services:
         condition: service_healthy
 
   prometheus:
-    image: prom/prometheus:latest
+    build:
+      context: prometheus
+      dockerfile: Dockerfile
     ports:
       - 9090:9090
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks:
       - cloud-pixel-canvas-network
     depends_on:
@@ -179,7 +177,9 @@ services:
       start_period: 10s
 
   grafana:
-    image: grafana/grafana:latest
+    build:
+      context: grafana
+      dockerfile: Dockerfile
     ports:
       - 3000:3000
     environment:
@@ -187,8 +187,6 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
     networks:
       - cloud-pixel-canvas-network
     depends_on:

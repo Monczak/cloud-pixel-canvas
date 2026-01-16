@@ -1,6 +1,7 @@
 {
   "realm": "pixel-canvas",
   "enabled": true,
+  "sslRequired": "none",
   "clients": [
     {
       "clientId": "pixel-canvas-client",

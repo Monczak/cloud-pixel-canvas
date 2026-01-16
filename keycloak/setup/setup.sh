@@ -28,7 +28,7 @@ until curl -s -f "$KC_HEALTH_URL/health/ready" > /dev/null; do
 done
 
 echo "2. Authenticating as Bootstrap Admin..."
-TOKEN_RESP=$(curl -s -d "client_id=admin-cli" -d "username=$BOOTSTRAP_USER" -d "password=$BOOTSTRAP_PASS" -d "grant_type=password" "$KC_URL/realms/master/protocol/openid-connect/token")
+TOKEN_RESP=$(curl -s -H "X-Forwarded-Proto: https" -d "client_id=admin-cli" -d "username=$BOOTSTRAP_USER" -d "password=$BOOTSTRAP_PASS" -d "grant_type=password" "$KC_URL/realms/master/protocol/openid-connect/token")
 check_response "$TOKEN_RESP" "Authentication"
 TOKEN=$(echo "$TOKEN_RESP" | jq -r .access_token)
 
@@ -38,8 +38,12 @@ kcurl() {
     METHOD=$1
     URL=$2
     shift 2
-    curl -s -X "$METHOD" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@" "$URL"
+    curl -s -X "$METHOD" -H "X-Forwarded-Proto: https" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@" "$URL"
 }
+
+echo "2.5. Disabling SSL Requirement for Master and App Realms..."
+kcurl PUT "$KC_URL/admin/realms/master" -d '{"sslRequired": "none"}'
+kcurl PUT "$KC_URL/admin/realms/$REALM" -d '{"sslRequired": "none"}'
 
 # --- Service Account Setup ---
 

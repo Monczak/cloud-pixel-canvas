@@ -141,3 +141,19 @@ resource "aws_lb_listener" "minio_api" {
     target_group_arn = aws_lb_target_group.minio_api_public.arn
   }
 }
+
+resource "aws_lb_listener_rule" "minio_public" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 110 # Slightly lower priority than API (100)
+  
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.minio_api_public.arn
+  }
+  
+  condition {
+    path_pattern {
+      values = ["/pixel-canvas-snapshots/*"]
+    }
+  }
+}

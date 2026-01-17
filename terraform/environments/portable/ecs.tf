@@ -291,7 +291,7 @@ module "backend" {
     KEYCLOAK_BACKEND_CLIENT_SECRET = random_password.keycloak_client_secret.result
 
     S3_ENDPOINT_URL  = "http://${aws_lb.internal.dns_name}:9000"
-    S3_PUBLIC_DOMAIN = "http://${aws_lb.main.dns_name}:9000"
+    S3_PUBLIC_DOMAIN = "http://${aws_lb.main.dns_name}"
     S3_BUCKET_NAME   = "pixel-canvas-snapshots"
     MINIO_ACCESS_KEY = random_password.minio_access_key.result
     MINIO_SECRET_KEY = random_password.minio_secret_key.result

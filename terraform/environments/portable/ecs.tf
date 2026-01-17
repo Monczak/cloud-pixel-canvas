@@ -212,6 +212,17 @@ module "prometheus" {
   subnets         = module.vpc.private_subnets
   security_groups = [aws_security_group.ecs_tasks.id]
   container_port  = 9090
+
+  env_vars = {
+    BACKEND_HOST = "${aws_lb.internal.dns_name}:8000"
+  }
+
+  lb_targets = [{
+    target_group_arn = aws_lb_target_group.prometheus_internal.arn
+    container_port   = 9090
+  }]
+  
+  depends_on = [aws_lb_listener.prometheus_internal]
 }
 
 # --- Grafana (Runs as 472) ---
@@ -233,6 +244,7 @@ module "grafana" {
   env_vars = {
     GF_SECURITY_ADMIN_USER     = "admin"
     GF_SECURITY_ADMIN_PASSWORD = random_password.grafana_admin_password.result
+    PROMETHEUS_URL             = "http://${aws_lb.internal.dns_name}:9090"
   }
 
   efs_config = {
@@ -284,14 +296,25 @@ module "backend" {
     MINIO_ACCESS_KEY = random_password.minio_access_key.result
     MINIO_SECRET_KEY = random_password.minio_secret_key.result
     AWS_REGION       = "us-east-1"
+
+    SYSTEM_KEY = random_password.system_key.result
   }
 
-  lb_targets = [{
-    target_group_arn = aws_lb_target_group.backend.arn
-    container_port   = 8000
-  }]
-
-  depends_on = [aws_lb_listener_rule.api]
+  lb_targets = [
+    {
+      target_group_arn = aws_lb_target_group.backend.arn
+      container_port   = 8000
+    },
+    {
+      target_group_arn = aws_lb_target_group.backend_internal.arn
+      container_port   = 8000
+    }
+  ]
+  
+  depends_on = [
+    aws_lb_listener_rule.api,
+    aws_lb_listener.backend_internal
+  ]
 }
 
 # --- Frontend ---

@@ -7,6 +7,25 @@ resource "aws_lb" "internal" {
   enable_cross_zone_load_balancing = true
 }
 
+# --- Backend Internal (TCP 8000) ---
+resource "aws_lb_target_group" "backend_internal" {
+  name        = "${var.project_name}-backend-int-tg"
+  port        = 8000
+  protocol    = "TCP"
+  vpc_id      = module.vpc.vpc_id
+  target_type = "ip"
+}
+
+resource "aws_lb_listener" "backend_internal" {
+  load_balancer_arn = aws_lb.internal.arn
+  port              = 8000
+  protocol          = "TCP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend_internal.arn
+  }
+}
+
 # --- Keycloak Internal (TCP 8080) ---
 resource "aws_lb_target_group" "keycloak_internal" {
   name        = "${var.project_name}-keycloak-int-tg"
@@ -107,5 +126,24 @@ resource "aws_lb_listener" "minio_internal" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.minio_internal.arn
+  }
+}
+
+# --- Prometheus Internal (TCP 9090) ---
+resource "aws_lb_target_group" "prometheus_internal" {
+  name        = "${var.project_name}-prom-int-tg"
+  port        = 9090
+  protocol    = "TCP"
+  vpc_id      = module.vpc.vpc_id
+  target_type = "ip"
+}
+
+resource "aws_lb_listener" "prometheus_internal" {
+  load_balancer_arn = aws_lb.internal.arn
+  port              = 9090
+  protocol          = "TCP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.prometheus_internal.arn
   }
 }

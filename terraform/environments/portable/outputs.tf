@@ -48,5 +48,6 @@ output "credentials" {
     }
     keycloak_admin = random_password.keycloak_admin_password.result
     grafana_admin  = random_password.grafana_admin_password.result
+    system_key     = random_password.system_key.result
   }
 }

@@ -33,3 +33,8 @@ resource "random_password" "grafana_admin_password" {
   length  = 16
   special = false
 }
+
+resource "random_password" "system_key" {
+  length  = 32
+  special = false
+}

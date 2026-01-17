@@ -164,6 +164,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - 9090:9090
+    environment:
+      - BACKEND_HOST=backend:8000
     networks:
       - cloud-pixel-canvas-network
     depends_on:
@@ -185,6 +187,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - PROMETHEUS_URL=http://prometheus:9090
     volumes:
       - grafana_data:/var/lib/grafana
     networks:

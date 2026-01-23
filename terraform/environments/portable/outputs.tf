@@ -46,8 +46,9 @@ output "credentials" {
       user = random_password.minio_access_key.result
       pass = random_password.minio_secret_key.result
     }
-    keycloak_admin = random_password.keycloak_admin_password.result
-    grafana_admin  = random_password.grafana_admin_password.result
-    system_key     = random_password.system_key.result
+    keycloak_admin      = random_password.keycloak_bootstrap_admin_password.result
+    keycloak_perm_admin = random_password.keycloak_permanent_admin_password.result
+    grafana_admin       = random_password.grafana_admin_password.result
+    system_key          = random_password.system_key.result
   }
 }

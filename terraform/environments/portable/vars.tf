@@ -39,12 +39,17 @@ variable "heartbeat_interval" {
   default     = 20
 }
 
-variable "grafana_admin_username" {
-  description = "Grafana admin username"
+variable "keycloak_permanent_admin_username" {
+  description = "Keycloak permanent admin username"
   type        = string
 }
 
-variable "grafana_admin_password" {
-  description = "Grafana admin password"
+variable "minio_admin_username" {
+  description = "MinIO admin username"
+  type        = string
+}
+
+variable "grafana_admin_username" {
+  description = "Grafana admin username"
   type        = string
 }

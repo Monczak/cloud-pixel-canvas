@@ -52,7 +52,8 @@ CLIENTS_RESP=$(kcurl GET "$KC_URL/admin/realms/$REALM/clients?clientId=$BACKEND_
 check_response "$CLIENTS_RESP" "Get Backend Client"
 EXISTING_ID=$(echo "$CLIENTS_RESP" | jq -r '.[0].id')
 
-CLIENT_PAYLOAD="{\"clientId\": \"$BACKEND_CLIENT_ID\", \"secret\": \"$BACKEND_CLIENT_SECRET\", \"serviceAccountsEnabled\": true, \"standardFlowEnabled\": false, \"publicClient\": false, \"enabled\": true}"
+# Enable directAccessGrantsEnabled so this client can be used for user login via backend
+CLIENT_PAYLOAD="{\"clientId\": \"$BACKEND_CLIENT_ID\", \"secret\": \"$BACKEND_CLIENT_SECRET\", \"serviceAccountsEnabled\": true, \"standardFlowEnabled\": false, \"directAccessGrantsEnabled\": true, \"publicClient\": false, \"enabled\": true}"
 
 if [ "$EXISTING_ID" = "null" ]; then
     echo "   Creating new client..."

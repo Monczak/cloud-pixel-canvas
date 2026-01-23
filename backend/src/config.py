@@ -31,11 +31,8 @@ class Config:
         # Keycloak
         self.keycloak_url: str = os.getenv("KEYCLOAK_URL", "http://localhost:8080")
         self.keycloak_realm: str = os.getenv("KEYCLOAK_REALM", "pixel-canvas")
-        self.keycloak_client_id: str = os.getenv("KEYCLOAK_CLIENT_ID", "pixel-canvas-client")
         self.keycloak_backend_client_id: str = os.getenv("KEYCLOAK_BACKEND_CLIENT_ID", "pixel-canvas-backend")
         self.keycloak_backend_client_secret: str = os.getenv("KEYCLOAK_BACKEND_CLIENT_SECRET", "")
-        self.keycloak_admin_username: str = os.getenv("KEYCLOAK_ADMIN_USERNAME", "admin")
-        self.keycloak_admin_password: str = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
 
         # MinIO
         self.minio_access_key: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")

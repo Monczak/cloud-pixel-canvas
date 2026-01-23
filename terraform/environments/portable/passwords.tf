@@ -19,7 +19,17 @@ resource "random_password" "minio_secret_key" {
   special = false
 }
 
-resource "random_password" "keycloak_admin_password" {
+resource "random_password" "keycloak_bootstrap_admin_username" {
+  length  = 16
+  special = false
+}
+
+resource "random_password" "keycloak_bootstrap_admin_password" {
+  length  = 16
+  special = false
+}
+
+resource "random_password" "keycloak_permanent_admin_password" {
   length  = 16
   special = false
 }

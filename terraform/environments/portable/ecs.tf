@@ -18,12 +18,10 @@ module "mongo" {
   subnets         = module.vpc.private_subnets
   security_groups = [aws_security_group.ecs_tasks.id]
   container_port  = 27017
-
-  # Run directly as mongo user to skip entrypoint chown
-  container_user = "999"
+  container_user  = "999"
 
   lb_targets = [{
-    target_group_arn = aws_lb_target_group.mongo.arn
+    target_group_arn = aws_lb_target_group.internal_services["mongo"].arn
     container_port   = 27017
   }]
 
@@ -38,11 +36,10 @@ module "mongo" {
     container_path  = "/data/db"
   }
 
-  # Ensure old task stops before new one starts
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
 
-  depends_on = [aws_lb_listener.mongo]
+  depends_on = [aws_lb_listener.internal_services]
 }
 
 # --- Valkey ---
@@ -59,11 +56,11 @@ module "valkey" {
   container_port  = 6379
 
   lb_targets = [{
-    target_group_arn = aws_lb_target_group.valkey.arn
+    target_group_arn = aws_lb_target_group.internal_services["valkey"].arn
     container_port   = 6379
   }]
 
-  depends_on = [aws_lb_listener.valkey]
+  depends_on = [aws_lb_listener.internal_services]
 }
 
 # --- MinIO ---
@@ -85,8 +82,9 @@ module "minio" {
   command = ["server", "/data", "--console-address", ":9001"]
 
   env_vars = {
-    MINIO_ROOT_USER     = random_password.minio_access_key.result
-    MINIO_ROOT_PASSWORD = random_password.minio_secret_key.result
+    MINIO_ROOT_USER            = random_password.minio_access_key.result
+    MINIO_ROOT_PASSWORD        = random_password.minio_secret_key.result
+    MINIO_BROWSER_REDIRECT_URL = "http://${aws_lb.main.dns_name}/minio/"
   }
 
   efs_config = {
@@ -96,20 +94,15 @@ module "minio" {
   }
 
   lb_targets = [
-    { target_group_arn = aws_lb_target_group.minio.arn, container_port = 9001 },
-    { target_group_arn = aws_lb_target_group.minio_api_public.arn, container_port = 9000 },
-    { target_group_arn = aws_lb_target_group.minio_internal.arn, container_port = 9000 }
+    { target_group_arn = aws_lb_target_group.services["minio"].arn, container_port = 9001 },
+    { target_group_arn = aws_lb_target_group.services["minio-api"].arn, container_port = 9000 },
+    { target_group_arn = aws_lb_target_group.internal_services["minio"].arn, container_port = 9000 }
   ]
 
-  # Ensure old task stops before new one starts
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
 
-  depends_on = [
-    aws_lb_listener.minio,
-    aws_lb_listener.minio_api,
-    aws_lb_listener.minio_internal
-  ]
+  depends_on = [aws_lb_listener.http, aws_lb_listener.internal_services]
 }
 
 # --- Keycloak DB (Runs as 70) ---
@@ -124,12 +117,10 @@ module "keycloak_db" {
   subnets         = module.vpc.private_subnets
   security_groups = [aws_security_group.ecs_tasks.id]
   container_port  = 5432
-
-  # Run as postgres user to avoid chown issues
-  container_user = "70"
+  container_user  = "70"
 
   lb_targets = [{
-    target_group_arn = aws_lb_target_group.postgres.arn
+    target_group_arn = aws_lb_target_group.internal_services["postgres"].arn
     container_port   = 5432
   }]
 
@@ -148,7 +139,7 @@ module "keycloak_db" {
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
 
-  depends_on = [aws_lb_listener.postgres]
+  depends_on = [aws_lb_listener.internal_services]
 }
 
 # --- Keycloak ---
@@ -173,31 +164,23 @@ module "keycloak" {
     KC_DB_URL                         = "jdbc:postgresql://${aws_lb.internal.dns_name}:5432/keycloak"
     KC_DB_USERNAME                    = "keycloak"
     KC_DB_PASSWORD                    = random_password.postgres_password.result
-    KC_BOOTSTRAP_ADMIN_USERNAME       = "admin"
-    KC_BOOTSTRAP_ADMIN_PASSWORD       = random_password.keycloak_admin_password.result
+    KC_BOOTSTRAP_ADMIN_USERNAME       = random_password.keycloak_bootstrap_admin_username.result
+    KC_BOOTSTRAP_ADMIN_PASSWORD       = random_password.keycloak_bootstrap_admin_password.result
     KC_HTTP_ENABLED                   = "true"
     KC_HOSTNAME_STRICT                = "false"
     KC_PROXY_HEADERS                  = "xforwarded"
     KC_HEALTH_ENABLED                 = "true"
-    KC_HTTP_MANAGEMENT_HEALTH_ENABLED = "false" # Move health checks back to port 8080
+    KC_HTTP_MANAGEMENT_HEALTH_ENABLED = "false"
+    KC_HTTP_RELATIVE_PATH             = "/auth"
   }
 
   lb_targets = [
-    {
-      target_group_arn = aws_lb_target_group.keycloak.arn
-      container_port   = 8080
-    },
-    {
-      target_group_arn = aws_lb_target_group.keycloak_internal.arn
-      container_port   = 8080
-    }
+    { target_group_arn = aws_lb_target_group.services["keycloak"].arn, container_port = 8080 },
+    { target_group_arn = aws_lb_target_group.internal_services["keycloak"].arn, container_port = 8080 }
   ]
 
   health_check_grace_period_seconds = 300
-
-  depends_on = [
-    aws_lb_listener.keycloak
-  ]
+  depends_on                        = [aws_lb_listener.http, aws_lb_listener.internal_services]
 }
 
 # --- Prometheus ---
@@ -218,11 +201,11 @@ module "prometheus" {
   }
 
   lb_targets = [{
-    target_group_arn = aws_lb_target_group.prometheus_internal.arn
+    target_group_arn = aws_lb_target_group.internal_services["prometheus"].arn
     container_port   = 9090
   }]
-  
-  depends_on = [aws_lb_listener.prometheus_internal]
+
+  depends_on = [aws_lb_listener.internal_services]
 }
 
 # --- Grafana (Runs as 472) ---
@@ -237,14 +220,14 @@ module "grafana" {
   subnets         = module.vpc.private_subnets
   security_groups = [aws_security_group.ecs_tasks.id]
   container_port  = 3000
-
-  # Ensure grafana runs as correct user for EFS
-  container_user = "472"
+  container_user  = "472"
 
   env_vars = {
-    GF_SECURITY_ADMIN_USER     = "admin"
-    GF_SECURITY_ADMIN_PASSWORD = random_password.grafana_admin_password.result
-    PROMETHEUS_URL             = "http://${aws_lb.internal.dns_name}:9090"
+    GF_SECURITY_ADMIN_USER        = var.grafana_admin_username
+    GF_SECURITY_ADMIN_PASSWORD    = random_password.grafana_admin_password.result
+    PROMETHEUS_URL                = "http://${aws_lb.internal.dns_name}:9090"
+    GF_SERVER_ROOT_URL            = "http://${aws_lb.main.dns_name}/grafana/"
+    GF_SERVER_SERVE_FROM_SUB_PATH = "true"
   }
 
   efs_config = {
@@ -254,11 +237,11 @@ module "grafana" {
   }
 
   lb_targets = [{
-    target_group_arn = aws_lb_target_group.grafana.arn
+    target_group_arn = aws_lb_target_group.services["grafana"].arn
     container_port   = 3000
   }]
 
-  depends_on = [aws_lb_listener.grafana]
+  depends_on = [aws_lb_listener.http]
 }
 
 # --- Backend ---
@@ -278,15 +261,17 @@ module "backend" {
     ENVIRONMENT  = "portable"
     CORS_ORIGINS = "http://${aws_lb.main.dns_name},http://localhost:3000"
 
+    CANVAS_WIDTH  = tostring(var.canvas_width)
+    CANVAS_HEIGHT = tostring(var.canvas_height)
+
     MONGO_URI = "mongodb://root:${random_password.mongo_root.result}@${aws_lb.internal.dns_name}:27017"
     MONGO_DB  = "pixel_canvas"
 
     VALKEY_HOST = aws_lb.internal.dns_name
     VALKEY_PORT = "6379"
 
-    KEYCLOAK_URL                   = "http://${aws_lb.internal.dns_name}:8080"
+    KEYCLOAK_URL                   = "http://${aws_lb.internal.dns_name}:8080/auth/"
     KEYCLOAK_REALM                 = "pixel-canvas"
-    KEYCLOAK_CLIENT_ID             = "pixel-canvas-client"
     KEYCLOAK_BACKEND_CLIENT_ID     = "pixel-canvas-backend"
     KEYCLOAK_BACKEND_CLIENT_SECRET = random_password.keycloak_client_secret.result
 
@@ -301,20 +286,11 @@ module "backend" {
   }
 
   lb_targets = [
-    {
-      target_group_arn = aws_lb_target_group.backend.arn
-      container_port   = 8000
-    },
-    {
-      target_group_arn = aws_lb_target_group.backend_internal.arn
-      container_port   = 8000
-    }
+    { target_group_arn = aws_lb_target_group.services["backend"].arn, container_port = 8000 },
+    { target_group_arn = aws_lb_target_group.internal_services["backend"].arn, container_port = 8000 }
   ]
-  
-  depends_on = [
-    aws_lb_listener_rule.api,
-    aws_lb_listener.backend_internal
-  ]
+
+  depends_on = [aws_lb_listener.http, aws_lb_listener.internal_services]
 }
 
 # --- Frontend ---
@@ -335,7 +311,7 @@ module "frontend" {
   }
 
   lb_targets = [{
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = aws_lb_target_group.services["frontend"].arn
     container_port   = 3000
   }]
 
@@ -356,13 +332,15 @@ resource "aws_ecs_task_definition" "keycloak_setup" {
     name  = "setup"
     image = "${aws_ecr_repository.keycloak_setup.repository_url}:latest"
     environment = [
-      { name = "KC_HEALTH_URL", value = "http://${aws_lb.internal.dns_name}:8080" },
-      { name = "KC_URL", value = "http://${aws_lb.internal.dns_name}:8080" },
+      { name = "KC_HEALTH_URL", value = "http://${aws_lb.internal.dns_name}:8080/auth" },
+      { name = "KC_URL", value = "http://${aws_lb.internal.dns_name}:8080/auth" },
       { name = "REALM", value = "pixel-canvas" },
-      { name = "BOOTSTRAP_USER", value = "admin" },
-      { name = "BOOTSTRAP_PASS", value = random_password.keycloak_admin_password.result },
+      { name = "BOOTSTRAP_USER", value = random_password.keycloak_bootstrap_admin_username.result },
+      { name = "BOOTSTRAP_PASS", value = random_password.keycloak_bootstrap_admin_password.result },
       { name = "BACKEND_CLIENT_ID", value = "pixel-canvas-backend" },
-      { name = "BACKEND_CLIENT_SECRET", value = random_password.keycloak_client_secret.result }
+      { name = "BACKEND_CLIENT_SECRET", value = random_password.keycloak_client_secret.result },
+      { name = "PERM_ADMIN_USER", value = var.keycloak_permanent_admin_username },
+      { name = "PERM_ADMIN_PASS", value = random_password.keycloak_permanent_admin_password.result }
     ]
     logConfiguration = {
       logDriver = "awslogs"
@@ -375,7 +353,6 @@ resource "aws_ecs_task_definition" "keycloak_setup" {
   }])
 }
 
-# --- Keycloak Setup Log Group ---
 resource "aws_cloudwatch_log_group" "setup" {
   name              = "/ecs/${var.project_name}/setup"
   retention_in_days = 1

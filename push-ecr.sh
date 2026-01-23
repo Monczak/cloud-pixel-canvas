@@ -127,12 +127,12 @@ elif [ "$ENV" == "portable" ]; then
 
     echo ""
     echo "Waiting for Keycloak to be healthy..."
-    echo "  Target: http://$ALB_URL:8080/health/ready"
+    echo "  Target: http://$ALB_URL/auth/health/ready"
 
     # Loop until Keycloak returns HTTP 200
     count=0
     while true; do
-        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$ALB_URL:8080/health/ready || echo "000")
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$ALB_URL/auth/health/ready || echo "000")
         
         if [ "$STATUS" == "200" ]; then
             echo "Keycloak is up (Status: $STATUS)"

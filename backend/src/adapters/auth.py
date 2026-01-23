@@ -518,40 +518,28 @@ class KeycloakAuthAdapter(AuthAdapter):
     def __init__(self):
         self.server_url = config.keycloak_url
         self.realm = config.keycloak_realm
-        self.client_id = config.keycloak_client_id
         
         self.backend_client_id = config.keycloak_backend_client_id
         self.backend_client_secret = config.keycloak_backend_client_secret
 
         self.openid = KeycloakOpenID(
             server_url=self.server_url,
-            client_id=self.client_id,
+            client_id=self.backend_client_id,
+            client_secret_key=self.backend_client_secret,
             realm_name=self.realm,
             verify=True,
         )
 
     async def _get_admin(self, realm: str = "master") -> KeycloakAdmin:
-        # Prefer service account
-        if self.backend_client_secret:
-            conn = KeycloakOpenIDConnection(
-                server_url=self.server_url,
-                realm_name=self.realm,
-                client_id=self.backend_client_id,
-                client_secret_key=self.backend_client_secret,
-                verify=True,
-                timeout=10
-            )
-            return KeycloakAdmin(connection=conn)
-        
-        # Fallback to bootstrap admin
-        return KeycloakAdmin(
+        conn = KeycloakOpenIDConnection(
             server_url=self.server_url,
-            username=config.keycloak_admin_username,
-            password=config.keycloak_admin_password,
-            realm_name=realm,
-            user_realm_name="master", # Admin users usually live in master
+            realm_name=self.realm,
+            client_id=self.backend_client_id,
+            client_secret_key=self.backend_client_secret,
             verify=True,
+            timeout=10
         )
+        return KeycloakAdmin(connection=conn)
 
     async def register(self, email: str, username: str, password: str) -> Dict:
         try:

@@ -6,154 +6,108 @@ resource "aws_lb" "main" {
   subnets            = module.vpc.public_subnets
 }
 
-# --- Frontend & Backend (Port 80) ---
-resource "aws_lb_target_group" "frontend" {
-  name        = "${var.project_name}-fe-tg"
-  port        = 3000
-  protocol    = "HTTP"
-  vpc_id      = module.vpc.vpc_id
-  target_type = "ip"
-  health_check {
-    path = "/"
+locals {
+  alb_targets = {
+    frontend = { port = 3000, path = "/", priority = 10 }
+    backend  = { port = 8000, path = "/api/*", priority = 20, health = "/api/" }
+    
+    keycloak = { port = 8080, path = "/auth/*", priority = 30, health = "/auth/health/ready" }
+    grafana  = { port = 3000, path = "/grafana/*", priority = 40, health = "/grafana/api/health" }
+    
+    # MinIO Console: Rewrite /minio/foo -> /foo because MinIO's console can't serve static files properly from a subpath
+    minio = { 
+      port = 9001, 
+      path = "/minio/*", 
+      priority = 50, 
+      health = "/minio/health/live",
+      rewrite = {
+        regex   = "^/minio/(.*)$"
+        replace = "/$1"
+      }
+    }
+    
+    minio-api = { port = 9000, path = "/pixel-canvas-snapshots/*", priority = 60, health = "/minio/health/live" }
   }
 }
 
-resource "aws_lb_target_group" "backend" {
-  name        = "${var.project_name}-be-tg"
-  port        = 8000
+resource "aws_lb_target_group" "services" {
+  for_each = local.alb_targets
+
+  name        = "${var.project_name}-${each.key}-tg"
+  port        = each.value.port
   protocol    = "HTTP"
   vpc_id      = module.vpc.vpc_id
   target_type = "ip"
+
   health_check {
-    path = "/api/"
+    path    = try(each.value.health, "/")
+    matcher = "200-399"
   }
 }
 
+# --- Port 80 Listener (Main) ---
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
   protocol          = "HTTP"
+
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = aws_lb_target_group.services["frontend"].arn
   }
 }
 
-resource "aws_lb_listener_rule" "api" {
+# --- Routing Rules (Port 80) ---
+resource "aws_lb_listener_rule" "services" {
+  for_each = { for k, v in local.alb_targets : k => v if k != "frontend" }
+
   listener_arn = aws_lb_listener.http.arn
-  priority     = 100
+  priority     = each.value.priority
+
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
+    target_group_arn = aws_lb_target_group.services[each.key].arn
   }
+
   condition {
     path_pattern {
-      values = ["/api/*"]
+      values = [each.value.path]
+    }
+  }
+
+  dynamic "transform" {
+    for_each = try(each.value.rewrite, null) != null ? [each.value.rewrite] : []
+    content {
+      type = "url-rewrite"
+      
+      url_rewrite_config {
+        rewrite {
+          regex   = transform.value.regex
+          replace = transform.value.replace
+        }
+      }
     }
   }
 }
 
-# --- Keycloak (Port 8080) ---
-resource "aws_lb_target_group" "keycloak" {
-  name        = "${var.project_name}-kc-tg"
-  port        = 8080
-  protocol    = "HTTP"
-  vpc_id      = module.vpc.vpc_id
-  target_type = "ip"
-  
-  health_check {
-    path = "/health/ready"
-  }
-}
+# --- Redirect Rules (Slash Handling) ---
+resource "aws_lb_listener_rule" "redirect_slash" {
+  for_each = { for k, v in local.alb_targets : k => v if k != "frontend" && endswith(v.path, "/*") }
 
-resource "aws_lb_listener" "keycloak" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "8080"
-  protocol          = "HTTP"
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.keycloak.arn
-  }
-}
-
-# --- Grafana (Port 3000) ---
-resource "aws_lb_target_group" "grafana" {
-  name        = "${var.project_name}-gf-tg"
-  port        = 3000
-  protocol    = "HTTP"
-  vpc_id      = module.vpc.vpc_id
-  target_type = "ip"
-  health_check {
-    path = "/api/health"
-  }
-}
-
-resource "aws_lb_listener" "grafana" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "3000"
-  protocol          = "HTTP"
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.grafana.arn
-  }
-}
-
-resource "aws_lb_target_group" "minio_api_public" {
-  name        = "${var.project_name}-minio-pub-tg"
-  port        = 9000
-  protocol    = "HTTP"
-  vpc_id      = module.vpc.vpc_id
-  target_type = "ip"
-  health_check {
-    path = "/minio/health/live"
-  }
-}
-
-# --- MinIO Console (Port 9001) ---
-resource "aws_lb_target_group" "minio" {
-  name        = "${var.project_name}-minio-tg"
-  port        = 9001
-  protocol    = "HTTP"
-  vpc_id      = module.vpc.vpc_id
-  target_type = "ip"
-  health_check {
-    path = "/minio/health/live"
-  }
-}
-
-resource "aws_lb_listener" "minio" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "9001"
-  protocol          = "HTTP"
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.minio.arn
-  }
-}
-
-# --- MinIO API Public (Port 9000) ---
-resource "aws_lb_listener" "minio_api" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "9000"
-  protocol          = "HTTP"
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.minio_api_public.arn
-  }
-}
-
-resource "aws_lb_listener_rule" "minio_public" {
   listener_arn = aws_lb_listener.http.arn
-  priority     = 110 # Slightly lower priority than API (100)
-  
+  priority     = each.value.priority + 500
+
   action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.minio_api_public.arn
+    type = "redirect"
+    redirect {
+      path        = "${trimsuffix(each.value.path, "/*")}/"
+      status_code = "HTTP_301"
+    }
   }
-  
+
   condition {
     path_pattern {
-      values = ["/pixel-canvas-snapshots/*"]
+      values = [trimsuffix(each.value.path, "/*")]
     }
   }
 }

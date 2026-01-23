@@ -4,7 +4,7 @@
   "sslRequired": "none",
   "clients": [
     {
-      "clientId": "pixel-canvas-client",
+      "clientId": "pixel-canvas-backend",
       "enabled": true,
       "publicClient": true,
       "directAccessGrantsEnabled": true,

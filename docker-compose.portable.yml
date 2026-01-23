@@ -22,7 +22,6 @@ services:
 
       - KEYCLOAK_URL=http://keycloak:8080
       - KEYCLOAK_REALM=pixel-canvas
-      - KEYCLOAK_CLIENT_ID=pixel-canvas-client
       - KEYCLOAK_BACKEND_CLIENT_ID=pixel-canvas-backend
       - KEYCLOAK_BACKEND_CLIENT_SECRET=very-secret
 

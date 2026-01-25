@@ -1,9 +1,5 @@
 resource "aws_ecs_cluster" "main" {
   name = "${var.project_name}-cluster"
-  setting {
-    name  = "containerInsights"
-    value = "enabled"
-  }
 }
 
 # --- Mongo (Runs as 999) ---
@@ -286,7 +282,7 @@ module "backend" {
     S3_BUCKET_NAME   = "pixel-canvas-snapshots"
     MINIO_ACCESS_KEY = random_password.minio_access_key.result
     MINIO_SECRET_KEY = random_password.minio_secret_key.result
-    AWS_REGION       = "us-east-1"
+    AWS_REGION       = var.aws_region
 
     SYSTEM_KEY = random_password.system_key.result
   }

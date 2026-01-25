@@ -45,9 +45,7 @@ output "ecs_sg_id" {
 output "credentials" {
   sensitive = true
   value = {
-    mongo_root          = random_password.mongo_root.result
     minio_perm_admin    = random_password.minio_console_admin_password.result
-    keycloak_admin      = random_password.keycloak_bootstrap_admin_password.result
     keycloak_perm_admin = random_password.keycloak_permanent_admin_password.result
     grafana_admin       = random_password.grafana_admin_password.result
     system_key          = random_password.system_key.result

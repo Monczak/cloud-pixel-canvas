@@ -26,6 +26,10 @@ output "keycloak_setup_repo" {
   value = aws_ecr_repository.keycloak_setup.repository_url
 }
 
+output "minio_setup_repo" {
+  value = aws_ecr_repository.minio_setup.repository_url
+}
+
 output "ecs_cluster_name" {
   value = aws_ecs_cluster.main.name
 }
@@ -41,11 +45,8 @@ output "ecs_sg_id" {
 output "credentials" {
   sensitive = true
   value = {
-    mongo_root = random_password.mongo_root.result
-    minio = {
-      user = random_password.minio_access_key.result
-      pass = random_password.minio_secret_key.result
-    }
+    mongo_root          = random_password.mongo_root.result
+    minio_perm_admin    = random_password.minio_console_admin_password.result
     keycloak_admin      = random_password.keycloak_bootstrap_admin_password.result
     keycloak_perm_admin = random_password.keycloak_permanent_admin_password.result
     grafana_admin       = random_password.grafana_admin_password.result

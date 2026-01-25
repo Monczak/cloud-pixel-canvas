@@ -69,10 +69,7 @@ async def lifespan(app: FastAPI):
                 aws_access_key_id=config.minio_access_key,
                 aws_secret_access_key=config.minio_secret_key
             ) as s3: # type: ignore
-                storage = S3StorageAdapter(s3, bucket_name=config.s3_bucket_name, public_domain=config.s3_public_domain)
-                await wait_for_dependency(lambda: storage.ensure_bucket_exists(make_public=True), "MinIO Storage")
-                dep_manager.storage = storage
-
+                dep_manager.storage = S3StorageAdapter(s3, bucket_name=config.s3_bucket_name, public_domain=config.s3_public_domain)
                 yield
 
         case "local":

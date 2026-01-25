@@ -79,3 +79,22 @@ resource "aws_efs_access_point" "grafana" {
     }
   }
 }
+
+# --- Prometheus (UID 65534 for 'nobody') ---
+resource "aws_efs_access_point" "prometheus" {
+  file_system_id = aws_efs_file_system.main.id
+
+  posix_user {
+    gid = 65534
+    uid = 65534
+  }
+
+  root_directory {
+    path = "/prometheus"
+    creation_info {
+      owner_gid   = 65534
+      owner_uid   = 65534
+      permissions = "755"
+    }
+  }
+}

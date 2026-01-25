@@ -205,6 +205,12 @@ module "prometheus" {
     container_port   = 9090
   }]
 
+  efs_config = {
+    file_system_id  = aws_efs_file_system.main.id
+    access_point_id = aws_efs_access_point.prometheus.id
+    container_path  = "/prometheus"
+  }
+
   depends_on = [aws_lb_listener.internal_services]
 }
 
@@ -320,7 +326,7 @@ module "frontend" {
 
 # --- Keycloak Setup Task ---
 resource "aws_ecs_task_definition" "keycloak_setup" {
-  family                   = "keycloak-setup"
+  family                   = "${var.project_name}-keycloak-setup"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
@@ -347,7 +353,40 @@ resource "aws_ecs_task_definition" "keycloak_setup" {
       options = {
         "awslogs-group"         = "/ecs/${var.project_name}/setup"
         "awslogs-region"        = var.aws_region
-        "awslogs-stream-prefix" = "setup"
+        "awslogs-stream-prefix" = "keycloak-setup"
+      }
+    }
+  }])
+}
+
+# --- MinIO Setup Task ---
+resource "aws_ecs_task_definition" "minio_setup" {
+  family                   = "${var.project_name}-minio-setup"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "256"
+  memory                   = "512"
+  execution_role_arn       = var.lab_role_arn
+  task_role_arn            = var.lab_role_arn
+
+  container_definitions = jsonencode([{
+    name  = "setup"
+    image = "${aws_ecr_repository.minio_setup.repository_url}:latest"
+    
+    environment = [
+      { name = "MINIO_URL",        value = "http://${aws_lb.internal.dns_name}:9000" },
+      { name = "MINIO_ROOT_USER",  value = random_password.minio_access_key.result },
+      { name = "MINIO_ROOT_PASSWORD", value = random_password.minio_secret_key.result },
+      { name = "MINIO_ADMIN_USER", value = var.minio_admin_username },
+      { name = "MINIO_ADMIN_PASSWORD", value = random_password.minio_console_admin_password.result }
+    ]
+    
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = "/ecs/${var.project_name}/setup"
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "minio-setup"
       }
     }
   }])

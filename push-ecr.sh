@@ -100,6 +100,7 @@ elif [ "$ENV" == "portable" ]; then
     GRAF_REPO=$(echo $TF_OUT | jq -r '.grafana_repo.value')
     KC_REPO=$(echo $TF_OUT | jq -r '.keycloak_repo.value')
     KC_SETUP_REPO=$(echo $TF_OUT | jq -r '.keycloak_setup_repo.value')
+    MINIO_SETUP_REPO=$(echo $TF_OUT | jq -r '.minio_setup_repo.value')
 
     push_image "backend"        "./backend"        $BE_REPO
     push_image "frontend"       "./frontend"       $FE_REPO
@@ -107,6 +108,7 @@ elif [ "$ENV" == "portable" ]; then
     push_image "grafana"        "./grafana"        $GRAF_REPO
     push_image "keycloak"       "./keycloak"       $KC_REPO
     push_image "keycloak-setup" "./keycloak/setup" $KC_SETUP_REPO
+    push_image "minio-setup"    "./minio/setup"    $MINIO_SETUP_REPO
 
     echo ""
     echo "Force updating services..."
@@ -143,15 +145,15 @@ elif [ "$ENV" == "portable" ]; then
         sleep 5
         count=$((count+1))
         
-        # Timeout after 10 minutes (60 * 5s)
+        # Timeout after 10 minutes (120 * 5s)
         if [ $count -ge 120 ]; then
             echo "Timeout waiting for Keycloak."
             exit 1
         fi
     done
 
-    echo "Running Keycloak setup task..."
-    ./run-keycloak-setup.sh $ENV
+    echo "Running setup tasks..."
+    ./run-setup.sh $ENV
 fi
 
 echo ""

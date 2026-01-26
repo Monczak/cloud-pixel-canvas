@@ -34,8 +34,6 @@ module "mongo" {
 
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
-
-  depends_on = [aws_lb_listener.internal_services]
 }
 
 # --- Valkey ---
@@ -55,8 +53,6 @@ module "valkey" {
     target_group_arn = aws_lb_target_group.internal_services["valkey"].arn
     container_port   = 6379
   }]
-
-  depends_on = [aws_lb_listener.internal_services]
 }
 
 # --- MinIO ---
@@ -97,8 +93,6 @@ module "minio" {
 
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
-
-  depends_on = [aws_lb_listener.http, aws_lb_listener.internal_services]
 }
 
 # --- Keycloak DB (Runs as 70) ---
@@ -134,8 +128,6 @@ module "keycloak_db" {
 
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
-
-  depends_on = [aws_lb_listener.internal_services]
 }
 
 # --- Keycloak ---
@@ -176,7 +168,6 @@ module "keycloak" {
   ]
 
   health_check_grace_period_seconds = 300
-  depends_on                        = [aws_lb_listener.http, aws_lb_listener.internal_services]
 }
 
 # --- Prometheus ---
@@ -206,8 +197,6 @@ module "prometheus" {
     access_point_id = aws_efs_access_point.prometheus.id
     container_path  = "/prometheus"
   }
-
-  depends_on = [aws_lb_listener.internal_services]
 }
 
 # --- Grafana (Runs as 472) ---
@@ -242,8 +231,6 @@ module "grafana" {
     target_group_arn = aws_lb_target_group.services["grafana"].arn
     container_port   = 3000
   }]
-
-  depends_on = [aws_lb_listener.http]
 }
 
 # --- Backend ---
@@ -291,8 +278,6 @@ module "backend" {
     { target_group_arn = aws_lb_target_group.services["backend"].arn, container_port = 8000 },
     { target_group_arn = aws_lb_target_group.internal_services["backend"].arn, container_port = 8000 }
   ]
-
-  depends_on = [aws_lb_listener.http, aws_lb_listener.internal_services]
 }
 
 # --- Frontend ---
@@ -316,8 +301,6 @@ module "frontend" {
     target_group_arn = aws_lb_target_group.services["frontend"].arn
     container_port   = 3000
   }]
-
-  depends_on = [aws_lb_listener.http]
 }
 
 # --- Keycloak Setup Task ---

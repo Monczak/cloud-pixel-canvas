@@ -16,7 +16,11 @@ check_response() {
     RESP=$1
     CONTEXT=$2
     if [ -z "$RESP" ]; then echo "Error: Empty response for $CONTEXT"; exit 1; fi
-    if echo "$RESP" | grep -q '"error"'; then echo "Error in response for $CONTEXT: $RESP"; exit 1; fi
+    # Check for "error" field in JSON, but ignore "already exists" for user creation if handled elsewhere
+    if echo "$RESP" | grep -q '"error"'; then 
+        echo "Error in response for $CONTEXT: $RESP"
+        exit 1
+    fi
 }
 
 echo "--- Keycloak Setup Script ---"
@@ -48,25 +52,43 @@ kcurl PUT "$KC_URL/admin/realms/$REALM" -d '{"sslRequired": "none"}'
 # --- Service Account Setup ---
 
 echo "3. Configuring Backend Client ($BACKEND_CLIENT_ID)..."
+
+CLIENT_PAYLOAD=$(jq -n \
+  --arg cid "$BACKEND_CLIENT_ID" \
+  --arg sec "$BACKEND_CLIENT_SECRET" \
+  '{clientId: $cid, secret: $sec, serviceAccountsEnabled: true, standardFlowEnabled: false, directAccessGrantsEnabled: true, publicClient: false, enabled: true}')
+
 CLIENTS_RESP=$(kcurl GET "$KC_URL/admin/realms/$REALM/clients?clientId=$BACKEND_CLIENT_ID")
 check_response "$CLIENTS_RESP" "Get Backend Client"
 EXISTING_ID=$(echo "$CLIENTS_RESP" | jq -r '.[0].id')
 
-# Enable directAccessGrantsEnabled so this client can be used for user login via backend
-CLIENT_PAYLOAD="{\"clientId\": \"$BACKEND_CLIENT_ID\", \"secret\": \"$BACKEND_CLIENT_SECRET\", \"serviceAccountsEnabled\": true, \"standardFlowEnabled\": false, \"directAccessGrantsEnabled\": true, \"publicClient\": false, \"enabled\": true}"
-
 if [ "$EXISTING_ID" = "null" ]; then
     echo "   Creating new client..."
-    kcurl POST "$KC_URL/admin/realms/$REALM/clients" -d "$CLIENT_PAYLOAD"
+    RESP=$(kcurl POST "$KC_URL/admin/realms/$REALM/clients" -d "$CLIENT_PAYLOAD")
+    # POST returns empty body on success (201), but we check if it failed
+    if echo "$RESP" | grep -q '"error"'; then echo "Error creating client: $RESP"; exit 1; fi
+    
     CID_UUID=$(kcurl GET "$KC_URL/admin/realms/$REALM/clients?clientId=$BACKEND_CLIENT_ID" | jq -r '.[0].id')
 else
     echo "   Updating existing client..."
-    kcurl PUT "$KC_URL/admin/realms/$REALM/clients/$EXISTING_ID" -d "$CLIENT_PAYLOAD"
+    RESP=$(kcurl PUT "$KC_URL/admin/realms/$REALM/clients/$EXISTING_ID" -d "$CLIENT_PAYLOAD")
+    if echo "$RESP" | grep -q '"error"'; then echo "Error updating client: $RESP"; exit 1; fi
+    
     CID_UUID=$EXISTING_ID
+fi
+
+if [ -z "$CID_UUID" ] || [ "$CID_UUID" = "null" ]; then
+    echo "Error: Could not determine Client UUID"
+    exit 1
 fi
 
 echo "4. Assigning 'manage-users' role to Service Account..."
 SA_USER_ID=$(kcurl GET "$KC_URL/admin/realms/$REALM/clients/$CID_UUID/service-account-user" | jq -r .id)
+
+if [ "$SA_USER_ID" = "null" ]; then
+    echo "Error: Service Account User not found. Client might still be public?"
+    exit 1
+fi
 
 # Fetch 'realm-management' client ID in pixel-canvas realm
 CLIENTS_LIST=$(kcurl GET "$KC_URL/admin/realms/$REALM/clients?first=0&max=200")
